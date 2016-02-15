@@ -1,0 +1,176 @@
+---
+layout: post
+title: "Создание Silverlight приложений для SharePoint. Часть 2."
+date: '2012-03-13T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- Silverlight
+- SharePoint
+modified_time: '2012-03-13T10:00:02.115+04:00'
+thumbnail: http://lh3.ggpht.com/-bAg4cxXqWRU/T1vf3r01OvI/AAAAAAAAAJA/ktNYAlIxaYY/s72-c/image_thumb%25255B7%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-3307112291466361186
+blogger_orig_url: http://blog.gandjustas.ru/2012/03/silverlight-sharepoint-2.html
+---
+
+<p>Полгода прошло с тех пор как я опубликовал <a href="http://gandjustas.blogspot.com/2011/08/silverlight-sharepoint-1.html" target="_blank">первую часть статьи</a>. Как раз полгода назад произошло смещение приоритетов веб-разработки Microsoft&#160; в сторону HTML5, и злые языки начали пророчить скорую смерть Silverlight. Тем не менее вышла пятая версия SL и, скорее всего, будет еще и шестая. Тем не менее фокус больше смещается в сторону HTML\JS, и по слухам в следующей версии SharePoint будет гораздо больше javascript и гораздо меньше SL.</p>  <p>Поэтому данная статья будет больше обзорной.</p>  <h5>Варианты развертывания Silverlight приложений</h5>  <p>Как обычно их три:</p>  <ol>   <li>В sandbox решении в виртуальную файловую систему sharepoint. </li>    <li>В fulltrust решении в физическую файловую систему. </li>    <li>Приложение на внешнем сервере, с использованием <a href="http://msdn.microsoft.com/en-us/library/ee787051.aspx" target="_blank">fluid application model</a>. </li> </ol>  <h5>Размещение Silverlight на портале.</h5>  <p>Самый часто используемый способ – веб-часть silverlight. Её можно найти в категории Media. Также возможно создание своих веб-частей, которые отображают silverlight приложение, чтобы передать дополнительные параметры и\или сделать fallback. Но лучше такие веб-части не создавать, а воспользоваться <a href="http://visualstudiogallery.msdn.microsoft.com/e8360a85-58ca-42d1-8de0-e48a1ab071c7" target="_blank">расширением для visual studio</a>. А в следующей версии visual studio такая веб-часть доступна “изкаропки”.</p>  <p>Еще один вариант – создание field control на silverlight. Пример можно посмотреть в <a href="http://msdn.microsoft.com/en-us/library/ff679964.aspx" target="_blank">статье на msdn</a>. </p>  <h5>Демо-приложение</h5>  <p>Для демонстрации всех способов развертывания напишу простое приложение, при запуске оно будет выводить Title узла, на котором запущено приложение.</p>  <p>Сначала надо добавить в проект SL сборки <em>Microsoft.SharePoint.Client.Silverlight</em>&#160; и <em>Microsoft.SharePoint.Client.Silverlight.Runtime</em>. Их можно найти в папке {SharePointRoot}\TEMPLATE\LAYOUTS\ClientBin.</p>  <p>Теперь можно написать немного кода:</p>  <pre class="brush: csharp;">var ctx = ClientContext.Current;
+var web = ctx.Web;
+ctx.Load(web, w =&gt; w.Title);
+
+ctx.ExecuteQueryAsync(
+(o, args) =&gt; //success
+{
+    Dispatcher.BeginInvoke(() =&gt;
+    {
+        tbTitle.Text = web.Title;
+    });
+
+},
+(o, args) =&gt; //failure
+{
+    Dispatcher.BeginInvoke(() =&gt;
+        {
+            MessageBox.Show(args.Exception.ToString());
+        });
+});</pre>
+
+<p>&#160;</p>
+
+<p>Для тех кто не знаком с клиентской объектной моделью SharePoint краткий ликбез. Точка входа в клиентскую объектную модель – класс ClientContext, в SL приложении можно получить “текущий контекст”, если приложение развернуто в SharePoint.</p>
+
+<p>Все объекты в клиентской объектной модели являются”обещаниями” (promise), то есть на момент получения они не содержат значений, а только общение что значения когда-нибудь там будут.&#160; Чтобы загрузить свойства объекта с сервера надо выполнить метод ClientContext.Load. В методе Load можно указать с помощью лямбда-выражений какие свойства загружать.</p>
+
+<p>Другая особенность клиентской объектной модели заключается в в том что команды не выполняются сразу, а складываются в очередь и отправляются на сервер при вызове ExecuteQuery\ExecuteQueryAsync. Так как в SL нельзя блокировать поток UI, то воспользуемся асинхронным вариантом.</p>
+
+<p>Третья особенность заключается в том что коллбеки завершения асинхронного вызова клиентской объектной модели не маршалятся в поток UI (сколько непонятных слов, сам в шоке). Поэтому надо вызывать Dispatcher.BeginInvoke чтобы поменять что-либо в UI или вывести Message Box.</p>
+
+<p>На первый взгляд код выглядит сложным, но при некоторой сноровке пишется “на автомате”.</p>
+
+<h5>Развертывание на уровне фермы</h5>
+
+<p>Это самый простой и прямолинейный вариант. Он вполне может быть оправдан если вы используете Silverlight приложение как field control для кастомного поля, в остальных случаях я бы не рекомендовал.</p>
+
+<p>Чтобы развернуть приложение в физическую файловую систему надо создать&#160; один пустой элемент (SPI), даже не нужен манифест (Element.xml) и фича, их можно просто удалить.</p>
+
+<p><a href="http://lh3.ggpht.com/-uLAnOcrXcr0/T1vf2nehPPI/AAAAAAAAAI4/emxw34zYEWY/s1600-h/image%25255B9%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh3.ggpht.com/-bAg4cxXqWRU/T1vf3r01OvI/AAAAAAAAAJA/ktNYAlIxaYY/image_thumb%25255B7%25255D.png?imgmax=800" width="410" height="453" /></a></p>
+
+<p>Далее в необходимо добавить в элемент project output из проекта silverlight, обязательно указав Deployment Type=TemplateFile</p>
+
+<p><a href="http://lh5.ggpht.com/-9hAGquSNUgw/T1vf4eFAL2I/AAAAAAAAAJE/hKE33U6-X9M/s1600-h/image%25255B14%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh6.ggpht.com/-JCJW0ITNfGs/T1vf5XR1eoI/AAAAAAAAAJQ/WPr5b6ZLMXE/image_thumb%25255B10%25255D.png?imgmax=800" width="546" height="300" /></a></p>
+
+<p>После этого надо добавить элемент в package (не в фичу). </p>
+
+<p>Последний шаг перед развертыванием – включить отладку Silverlight.</p>
+
+<p><a href="http://lh5.ggpht.com/-w9Sh0Jct_CI/T1vf6sDLjQI/AAAAAAAAAJY/WINT5_T_CNk/s1600-h/image%25255B18%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh6.ggpht.com/-NVKVYjyyIs0/T1vf7lnUidI/AAAAAAAAAJg/6nyUMCXPcTg/image_thumb%25255B12%25255D.png?imgmax=800" width="548" height="376" /></a></p>
+
+<p>После этого можно жать F5 на проекте SharePoint, добавлять на страницу веб-часть Silverlight и ставить точки останова в проекте Silverlight.</p>
+
+<p><a href="http://lh4.ggpht.com/-RK9XiSwUUEg/T1vf8kqecOI/AAAAAAAAAJo/lpxMDQOOTq4/s1600-h/image%25255B27%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh5.ggpht.com/-1KJjXPyXj2Y/T1vf9o0Ln7I/AAAAAAAAAJw/TlzqCxdnahQ/image_thumb%25255B17%25255D.png?imgmax=800" width="552" height="466" /></a></p>
+
+<h5>Развертывание в sandbox</h5>
+
+<p>Для развертывания решения в sandbox надо выполнить те же шаги, что и для fulltrust решения, но вместо пустого элемента создать модуль, указать Deployment Type=ElementFile в project output references и использовать фичу для развертывания.</p>
+
+<p><a href="http://lh5.ggpht.com/-CevDpRNeVR4/T1vf-W-kC9I/AAAAAAAAAJ4/1zbp92abdec/s1600-h/image%25255B33%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh4.ggpht.com/-KtHLQx9xgdg/T1vf_pO-dHI/AAAAAAAAAKA/sjyWZGor5Iw/image_thumb%25255B21%25255D.png?imgmax=800" width="445" height="500" /></a></p>
+
+<p><a href="http://lh3.ggpht.com/--CuiyCHENI4/T1vgATP2pAI/AAAAAAAAAKE/GIb1rK0DvyI/s1600-h/image%25255B38%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh3.ggpht.com/-Ixg-Yk5dipI/T1vgBcDirqI/AAAAAAAAAKQ/vGDWArqbC-E/image_thumb%25255B24%25255D.png?imgmax=800" width="564" height="424" /></a></p>
+
+<p>И все, в манифест модуля автоматически попадет элемент с xap файлом.</p>
+
+<p>Далее как обычно: F5, веб-часть, отладка.</p>
+
+<h5>Развертывание на внешнем хосте</h5>
+
+<p>Для начала надо включить поддержку внешних приложений в SharePoint. Это можно сделать в powershell небольшим скриптом.</p>
+
+<pre class="brush: ps;">$cs = [Microsoft.SharePoint.Administration.SPWebService]::ContentService
+$cs.ExternalApplicationSettings.Enabled = $true
+$cs.Update()</pre>
+
+<p>Я не проверял включены ли внешние приложения в office 365, очень надеюсь что включены. Иначе я зря это все пишу.</p>
+
+<p>Чтобы разместить внешнее приложение в SharePoint надо передать веб-части silverlight манифест приложения (<a href="http://msdn.microsoft.com/en-us/library/ee535930.aspx" target="_blank">applicationXml</a>). При добавлении веб-части появится запрос манифеста (после включения внешних приложений).</p>
+
+<pre class="brush: xml;">&lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot; ?&gt;
+&lt;applicationParts xmlns='http://schemas.microsoft.com/sharepoint/2009/fluidapp'&gt;
+  &lt;applicationPart&gt;
+    &lt;metaData&gt;
+      &lt;applicationId&gt;F0F0E6C1-5B42-4277-9EFF-777F1330BCD8&lt;/applicationId&gt;
+      &lt;applicationUrl&gt;http://localhost:21351/HostWebSite/ClientBin/SlApp.xap&lt;/applicationUrl&gt;
+      &lt;principal&gt;contoso\sp-app&lt;/principal&gt;
+      &lt;sharepointRequestHandlerUrl&gt;/HostWebSite/sp.ashx&lt;/sharepointRequestHandlerUrl&gt;
+    &lt;/metaData&gt;
+    &lt;data&gt;
+      &lt;webPartProperties&gt;
+        &lt;property name='Title'&gt;SlApp&lt;/property&gt;
+        &lt;property name='Height'&gt;400px&lt;/property&gt;
+        &lt;property name='Width'&gt;300px&lt;/property&gt;
+        &lt;property name='MinRuntimeVersion'&gt;3.0&lt;/property&gt;
+      &lt;/webPartProperties&gt;
+      &lt;customProperties&gt;
+      &lt;/customProperties&gt;
+    &lt;/data&gt;
+  &lt;/applicationPart&gt;
+&lt;/applicationParts&gt;</pre>
+
+<p>&#160;</p>
+
+<p>До того как создавать веб-часть необходимо дать доступ пользователю, который указан в разделе principal, с помощью метода <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spweb.addapplicationprincipal.aspx" target="_blank">AddApplicationPrincipal</a>. Лучше всего это делать в коде активации фичи.</p>
+
+<pre class="brush: csharp;">public override void FeatureActivated(SPFeatureReceiverProperties properties)
+{
+    var web = properties.Feature.Parent as SPWeb;
+    var principal = web.AddApplicationPrincipal(&quot;contoso\\sp-app&quot;, true, false);
+    web.RoleAssignments.Add(new SPRoleAssignment(principal)
+    {
+        //Don't do this in podution code
+        RoleDefinitionBindings = { web.RoleDefinitions.GetByType(SPRoleType.Administrator) }
+    });           
+}
+
+public override void FeatureDeactivating(SPFeatureReceiverProperties properties)
+{
+    var web = properties.Feature.Parent as SPWeb;
+    var principal = web.AddApplicationPrincipal(&quot;contoso\\sp-app&quot;, true, false);
+    web.RoleAssignments.Remove(principal);
+}</pre>
+
+<p>После деплоя решения и активации фичи можно попробовать добавить на страницу веб-часть Silverlight и указать application xml. Приложение отобразится но сразу будет падать с ошибкой.</p>
+
+<p>Небольшой ликбез про кросс-доменные вызовы в silverlight. По умолчанию приложение на SL может обращаться только к тому домену, откуда оно загружено. В модели external application в sharepoint приложение silverlight находится в другом домене и ему кросс-доменные вызовы запрещены.</p>
+
+<p>Иногда может помочь файл clientaccesspolicy.xml, который разрешает silvelight обращаться за пределы домена, но там надо явно прописать куда можно обращаться или указать что обращаться можно везде. Но это небезопасно, так как&#160; в случае sharepoint приложение на Silverlight будет передавать пароль по сети для аутентификации.</p>
+
+<p>Поэтому сделана такая система. В манифесте приложения указывается куда silverlight приложение будет отправлять запросы при вызове клиентской объектной модели (элемент <em>sharepointRequestHandlerUrl</em>). Обработчик по указанному url будет определять какой сайт sharepoint обращается и передавать логин и пароль именно для этого сайта.</p>
+
+<p>Чтобы создать этот обработчик надо в сайте, где хостится silverlight создать обычный ashx-хендлер.</p>
+
+<pre class="brush: csharp;">public class sp : IHttpHandler {
+    
+    public void ProcessRequest (HttpContext context) {
+        RequestForwarder forwarder = new RequestForwarder(context);
+        if (!String.IsNullOrEmpty(forwarder.Url))
+        {
+            forwarder.WebRequest.Credentials
+                = new System.Net.NetworkCredential(&quot;sp-app&quot;, &quot;P@ssw0rd&quot;, &quot;contoso&quot;);
+            forwarder.ProcessRequest();
+        }
+    }
+ 
+    public bool IsReusable {
+        get {
+            return false;
+        }
+    }
+}</pre>
+
+<p>&#160;</p>
+
+<p>Класс RequestForwarder находится во “взрослой” клиентской объектной модели.</p>
+
+<p>После добавления хендлера приложение перестает выдавать ошибку и работает нормально.</p>
+
+<h5>Заключение</h5>
+
+<p>Как видите довольно много возможностей развертывания&#160; приложений Silverlight в SharePoint. При этом само приложение не поменялось ни в одном сценарии.</p>
+<iframe style="padding-bottom: 0px; background-color: #fcfcfc; padding-left: 0px; padding-right: 0px; padding-top: 0px" title="Preview" height="120" marginheight="0" src="https://skydrive.live.com/embed?cid=E74E2842A8A54DC1&amp;resid=E74E2842A8A54DC1%21608&amp;authkey=AFBS--TufsmkxDs" frameborder="0" width="98" marginwidth="0" scrolling="no"></iframe>  

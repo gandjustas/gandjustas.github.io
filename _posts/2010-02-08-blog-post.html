@@ -1,0 +1,115 @@
+---
+layout: post
+title: "Аудит изменений с учетом контекста операций"
+date: '2010-02-08T17:17:00.001+03:00'
+author: "Станислав Выщепан"
+tags:
+- IoC
+- Unity
+- ".NET"
+- AOP
+- Enterprise Library
+modified_time: '2010-02-08T17:19:31.356+03:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-2842811302528649862
+blogger_orig_url: http://blog.gandjustas.ru/2010/02/blog-post.html
+---
+
+<p>В <a href="http://gandjustas.blogspot.com/2010/02/entity-framework.html" target="_blank">предыдущем посте</a> я описал способ, который позволяет проводить аудит изменений данных в Entity Framework, не затрагивая сами классы сущностей.</p>  <p>Аудит изменений данных вполне возможно делать в самой БД с помощью триггеров, но в базу не попадают сведения о том какой пользователь системы произвел изменения (в случае приложения, построенного по принципу trusted subsystem) и с какой целью были проведены эти изменения.</p>  <p>Для каждой операции работы изменения данных существует некоторый контекст, который включает в себя как некоторые явные параметры, как имя пользователя или URL, так и неявные, например намерения, с которыми были выполнены изменения данных (частично их можно восстановить по стеку вызовов).</p>  <p>Для задач логирования было бы удобно иметь доступ к некоторым параметрам контекста, особенно неявным. Эти параметры должны прозрачно передаваться по цепочке вызовов. Для решения таких задач можно применить монады, но тогда придется переписать весь код под использование монад, что очень проблематично. Можно воспользоваться возможностями AOP и IoC чтобы обеспечить неявную передачу явного контекста.</p>  <p>Для начала нам понадобится класс для хранения текущего контекста. Как и в случае со стеком вызовов, контексты тоже могут составлять некоторый стек.</p>  <pre class="brush: csharp;">public interface IContextManager&lt;T&gt;
+{
+    void Push(T value);
+    void Revert();
+    IEnumerable&lt;T&gt; GetValues();
+}</pre>
+
+<p>Реализация такого интерфейса тривиальна:</p>
+
+<pre class="brush: csharp;">public class ContextManager&lt;T&gt;: IContextManager&lt;T&gt;
+{
+    Stack&lt;T&gt; _stack = new Stack&lt;T&gt;();
+
+    public void Push(T value)
+    {
+        _stack.Push(value);
+    }
+
+    public void Revert()
+    {
+        _stack.Pop();
+    }
+
+    public IEnumerable&lt;T&gt; GetValues()
+    {
+        foreach (var item in _stack)
+        {
+            yield return item;
+        }
+    }
+}</pre>
+
+<p>&#160;</p>
+
+<p>Далее с помощью IoC контейнера создается один экземпляр этого класса, который живет в течение обработки одного запроса. Этот экземпляр инжектится в каждый класс, заинтересованный в установке или получении текущего контекста.</p>
+
+<pre class="brush: csharp;">try
+{
+    _contextManager.Push(contextValue);
+    //do actions
+}
+finally
+{
+    _contextManager.Revert();
+}</pre>
+
+<p>Естественно каждый раз писать кучу try\finally не хочется, а учитывая что контекст в большинстве случаев статический, то хотелось бы задавать его декларативно и в одном месте.</p>
+
+<p>Тут на помощь приходит AoP. Можно написать небольшой обработчик вызовов и с помощью Unity Interception устанавливать текущий контекст в зависимости от атрибута.</p>
+
+<pre class="brush: csharp;">[AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+public sealed class ContextAttribute : HandlerAttribute
+{
+    public ContextAttribute(object value)
+    {
+        this.Value = value;
+    }
+
+    public object Value { get; private set; }
+
+    public override ICallHandler CreateHandler(IUnityContainer container)
+    {
+        var method = this.GetType().GetMethod(&quot;CreateHandlerInternal&quot;, BindingFlags.Instance | BindingFlags.NonPublic);
+        return (ICallHandler)method.MakeGenericMethod(Value.GetType()).Invoke(this, new object[] { container });
+    }
+
+    private ContextCallHandler&lt;T&gt; CreateHandlerInternal&lt;T&gt;(IUnityContainer container)
+    {
+        return new ContextCallHandler&lt;T&gt;(container.Resolve&lt;IContextManager&lt;T&gt;&gt;(), (T)this.Value);
+    }
+
+}
+
+public class ContextCallHandler&lt;T&gt;: ICallHandler
+{
+    IContextManager&lt;T&gt; _manager;
+    T _value;
+
+    public ContextCallHandler(IContextManager&lt;T&gt; manager, T value)
+    {
+        _manager = manager;
+        _value = value;
+    }
+
+    public IMethodReturn Invoke(IMethodInvocation input, GetNextHandlerDelegate getNext)
+    {
+        _manager.Push(_value);
+        var result = getNext()(input, getNext);
+        _manager.Revert();
+        return result;
+    }
+    public int Order { get; set; }
+}</pre>
+
+<p>&#160;</p>
+
+<p>Теперь навешивая атрибут [Context(value)] можно задавать контекст метода. А заинжектив в ObjectContext экземпляр типа IContextManager&lt;T&gt; можно при логировании получать текущее значение контекста, в случае если SaveChanges вызывается в самом конце цепочки вызовов.</p>
+
+<p>Для того чтобы все работало надо правильно сконфигурировать контейнер как описано в <a href="http://gandjustas.blogspot.com/2009/01/aop-unity.html" target="_blank">этом посте</a>.</p>  

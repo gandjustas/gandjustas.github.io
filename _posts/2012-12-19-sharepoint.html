@@ -1,0 +1,32 @@
+---
+layout: post
+title: "Как создавать надежные приложения в серверном коде для SharePoint"
+date: '2012-12-19T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint
+modified_time: '2012-12-19T10:00:08.193+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-2572179589178357780
+blogger_orig_url: http://blog.gandjustas.ru/2012/12/sharepoint.html
+---
+
+<p>Несколько советов о том как сделать код более надежным и устойчивым:</p> <ol> <li>Получайте списки только с помощью такой конструкции&nbsp; <br><pre class="brush: csharp;">web.GetList(SPUrlUtility.CombineUrl(web.Url, listUrl)</pre><br>Получение по Title списка ненадежно, так как Title может быть изменен пользователем без вашего ведома. <br>
+<li>При получении значений полей элементов списка используйте Id поля или его StaticName. <br><pre class="brush: csharp;">listItem[FieldId] //Если вы деплоите это поле или это встроенное поле
+listItem[FiledStaticName] //Если поле нестандартное и не вы его деплоите</pre><br>Обращение по Title поля ненадежно, так как Title может меняться. <br>
+<li>Для стандартных полей используйте классы <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spbuiltinfieldid.aspx" target="_blank"><strong>SPBuiltInFieldId</strong></a> и <strong><a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.publishing.fieldid(v=office.15).aspx" target="_blank">Microsoft.SharePoint.Publishing.FieldId</a><br></strong>
+<li>Для обращения к стандартным типам контента используйте <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spbuiltincontenttypeid_fields.aspx" target="_blank"><strong>SPBuiltInContentTypeId</strong></a> и <strong><a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.publishing.contenttypeid.aspx" target="_blank">Microsoft.SharePoint.Publishing.ContentTypeId</a><br></strong>
+<li>Используйте класс <a href="http://msdn.microsoft.com/ru-ru/library/system.convert(v=vs.90).aspx" target="_blank">Convert</a> для получения типизированного значения поля <br><pre class="brush: csharp;">Convert.ToDateTime(listItem["Created"])</pre>Для разных типов полей SharePoint может возвращать разные типы данных. Например числа могут возвращаться как строки. Кроме того Convert корректно обрабатывает null. Даже если у вас Required поле, то все равно может вернуться null по многим причинам. <br>
+<li>Добавление элементов в список <br><pre class="brush: csharp;">list.AddItem() //только так
+//list.Items.Add() - ТАК ДЕЛАТЬ НЕЛЬЗЯ</pre>
+<li>Количество элементов в списке <br><pre class="brush: csharp;">list.ItemCount //Только так
+//list.Items.Count – ТАК ДЕЛАТЬ НЕЛЬЗЯ</pre>
+<li>AllowDeletion <br><br>Используйте AllowDeletion=”false” для списков и полей, которые вы деплоите в своем решении<br>
+<li>Sealed <br><br>Используйте Sealed=”true” для полей и типов контента, которые вы деплоите в своем решении<br>
+<li>Количество элементов в результатах <br><br>Обязательно указывайте RowLimit свойство при получении элементов с помощью <strong><a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spquery.aspx" target="_blank">SPQuery</a></strong> или <a href="http://msdn.microsoft.com/en-us/library/microsoft.office.server.search.query.keywordquery_members.aspx" target="_blank"><strong>KeywordQuery</strong></a><br>
+<li>Проверка активации фич <br><br>В своем коде обязательно проверяйте, что необходимые для работы фичи активированы на узле\коллекции.<br>
+<li>Деплой веб-части вместе со списками <br><br>Если вы создаете веб-часть, которая обращается к списку, в том же решении, то обязательно поместите в одну фичу уровня Site. Внутри веб-части получайте список с RootWeb (см пункт 1).<br>
+<li>Не использовать RunWithElevatedPriveleges <br><br>Используйте конструктор SPSite с SPUserToken. Передавайте <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spusertoken.systemaccount.aspx" target="_blank"><strong>SPUserToken.SystemAccount</strong></a><strong>.<br><br></strong>Использование RunWithElevatedPriveleges оправдано только когда вы хотите обратиться к веб-сервису\БД от имени учетной записи пула приложений.<br><br>И не стоит забывать, что работает данный метод только в контексте веб-приложения.<br><br>
+<li>Не модифицировать SPPersistedObject в контексте веб-приложений <br><br>Это просто не работает. Можно обойти, но не стоит. <br>Все объекты, унаследованные от SPPersistedObject, должны создаваться\изменяться в фичах уровня Farm и WebApplication или в задачах таймера.<br><br>
+<li>Не обращаться к ресурсам компьютера <br><br>Их просто может не быть. Даже если вы при активации фичи создаете все что необходимо, то новый сервер может быть введен в ферму без переактивации фич. <br><br>Это касается фалов, вне тех что деплоятся в решении, ключей реестра, event source&nbsp; в windows event log и другого.<br>
+<li>Не использовать параметры в web.config <br><br>Код SharePoint может быть запущен не только в веб-приложении, но и в timerjob, powershell, процессе-домене службы поиска или в любом коде на сервере.<br><br>Естественно не везде будет работать стандартный класс ConfigurationManager(WebConfigurationManager).<br></li></ol>
+<p>Если есть еще советы – пишите, обязательно дополним список.</p>  

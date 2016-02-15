@@ -1,0 +1,190 @@
+---
+layout: post
+title: "Поиск в приложениях SharePoint. Часть 3."
+date: '2014-02-05T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- ajax
+- javascript
+- WCF
+- web parts
+- jQuery
+- "поиск"
+- SharePoint
+modified_time: '2014-02-05T10:00:06.319+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1314615619934627913
+blogger_orig_url: http://blog.gandjustas.ru/2014/02/sharepoint2010-search-part-3.html
+---
+
+В SharePoint 2013 появился REST веб-сервис, который позволяет делать поисковые запросы из JavaScript. В SharePoint 2010 есть только <a href="http://msdn.microsoft.com/ru-ru/library/ee872313(v=office.14).aspx" target="_blank">search.asmx</a>, который требует генерировать и парсить большой объём XML (в лучших традициях SharePoint).  <p>Чтобы упростить жизнь разработчику клиентских компонентов я написал REST веб-сервис для SharePoint 2010.</p> <h3>Реализация</h3> <p>За основу взял метод, который описывал ранее - <a href="http://gandjustas.blogspot.com/2012/12/javascript-enabled-sharepoint-wcf.html" target="_blank">Javascript-enabled SharePoint WCF services</a>.</p> <p>Контракт у сервиса очень простой:</p><pre class="brush: csharp;">[ServiceContract]
+public interface ISearch
+{
+    [OperationContract]
+    [WebGet(BodyStyle = WebMessageBodyStyle.Bare, RequestFormat = WebMessageFormat.Json, ResponseFormat = WebMessageFormat.Json)]
+    Stream Query(string q, int top, int skip, string select, string orderBy, bool includeRefiners, string refiners);
+}
+</pre>
+<p>Параметры вызова:</p>
+<ul>
+<li><em>q</em> – текст запроса (обязательно). 
+<li><em>top</em> – количество результатов. 
+<li><em>skip</em> – с какой позиции в выборке отдавать результаты. 
+<li><em>select</em> – через запятую названия managed properties в результатах. 
+<li><em>orderBy</em> – через запятую названия managed properties по которым сортировать результат, после имени можно указать <em>desc</em> для сортировки по убыванию. 
+<li><em>includeRefiners</em> – <em>true</em> или <em>false</em>, возвращать результаты уточнений или нет. 
+<li><em>refiners</em> - через запятую названия managed properties для формирования уточнений.</li></ul>
+<p>Реализация:</p><pre class="brush: csharp;">public System.IO.Stream Query(string q, int top, int skip, string select, string orderBy,
+                    bool includeRefiners, string r) 
+{
+    using (new SPMonitoredScope("Execute Query Method"))
+    {
+        var site = SPContext.Current.Site;
+        var result = GetSearchResults(site, q, top, skip, select, orderBy, includeRefiners, r);
+        return ToJson(result);
+    }
+}
+</pre>
+<p>Метод GetSearchResults довольно простой, он передает параметры запроса в объект <strong>KeywordQuery </strong>и получает результат.</p><pre class="brush: csharp;">private static ResultTableCollection GetSearchResults(SPSite site, string q, int top, int skip, string select, string orderBy, bool includeRefiners, string r)
+{
+    var query = new KeywordQuery(site);
+    query.QueryText = q;
+    query.StartRow = skip;
+    if (top &gt; 0)
+    {
+        query.RowLimit = top;
+    }
+
+    FillSelectProperties(select, query);
+
+    FillSortList(orderBy, query);
+
+    query.ResultTypes = ResultType.RelevantResults;
+    if (includeRefiners)
+    {
+        query.ResultTypes |= ResultType.RefinementResults;
+        query.Refiners = r;
+    }
+    return query.Execute();
+}
+</pre>
+<p>Методы <em>FillSelectProperties</em> и <em>FillSortList</em> парсят значения из строки запроса и заполняют свойства объекта <strong>KeywordQuery</strong>.</p><pre class="brush: csharp;">private static void FillSortList(string orderBy, KeywordQuery query)
+{
+    if (!string.IsNullOrEmpty(orderBy))
+    {
+        var orderByParts = orderBy.Split(new[] { ',' }, System.StringSplitOptions.RemoveEmptyEntries);
+        query.SortList.Clear();
+        foreach (var part in orderByParts)
+        {
+            var pair = part.Split(' ');
+            if (pair.Length &gt; 1 &amp;&amp; string.Compare(pair[1], "desc", System.StringComparison.OrdinalIgnoreCase) == 0)
+            {
+                query.SortList.Add(pair[0], SortDirection.Descending);
+            }
+            else
+            {
+                query.SortList.Add(pair[0], SortDirection.Ascending);
+            }
+        }
+    }
+}
+
+private static void FillSelectProperties(string select, KeywordQuery query)
+{
+    if (!string.IsNullOrEmpty(select))
+    {
+        var properties = select.Split(new[] { ',' }, System.StringSplitOptions.RemoveEmptyEntries);
+        query.SelectProperties.Clear();
+        query.SelectProperties.AddRange(properties);
+    }
+}</pre>
+<p>Теперь самая интересная часть – преобразование результатов в JSON. Для сериализации не подойдет стандартный <strong><a href="http://msdn.microsoft.com/ru-ru/library/system.runtime.serialization.json.datacontractjsonserializer(v=vs.90).aspx" target="_blank">DataContractJsonSerializer</a></strong>, он не умеет сериализовывать DataSet и DataTable в компактном виде. Со времен появления ASP.NET Ajax в библиотеке появился класс <a href="http://msdn.microsoft.com/ru-ru/library/system.web.script.serialization.javascriptserializer(v=vs.90).aspx" target="_blank"><strong>JavaScriptSerializer</strong></a><strong>. </strong>Он не очень быстр, зато его легко расширять, чтобы получать ровно ту разметку, которая нужна и не требуется дополнительных библиотек.</p>
+<p>Метод <em>ToJson</em>:</p><pre class="brush: csharp;">private static Stream ToJson(ResultTableCollection value)
+{
+    JavaScriptSerializer ser = new JavaScriptSerializer();
+
+    List&lt;JavaScriptConverter&gt; converters = new List&lt;JavaScriptConverter&gt;();
+
+    converters.Add(new DataRowConverter());
+    converters.Add(new ResultTableCollectionConverter());
+    ser.RegisterConverters(converters);
+
+    var resultStream = new MemoryStream();
+    var writer = new StreamWriter(resultStream);
+    writer.Write(ser.Serialize(value));
+
+    writer.Flush();
+    resultStream.Position = 0;
+
+    return resultStream;
+}
+</pre>
+<p>Для сериализации используется два дополнительных конвертера.</p><em>ResultTableCollectionConverter</em>:<pre class="brush: csharp; collapse: true;">internal class ResultTableCollectionConverter : JavaScriptConverter
+{
+    public override IEnumerable&lt;Type&gt; SupportedTypes
+    {
+        get { return new Type[] { typeof(ResultTableCollection) }; }
+    }
+
+    public override object Deserialize(IDictionary&lt;string, object&gt; dictionary, Type type,
+                                       JavaScriptSerializer serializer)
+    {
+        throw new NotImplementedException();
+    }
+
+    public override IDictionary&lt;string, object&gt; Serialize(object obj, JavaScriptSerializer serializer)
+    {
+        var resultTableCollection = obj as ResultTableCollection;
+        Dictionary&lt;string, object&gt; propValues = new Dictionary&lt;string, object&gt;();
+
+        if (resultTableCollection != null)
+        {
+            if (resultTableCollection.Exists(ResultType.RelevantResults))
+            {
+                var resultTable = resultTableCollection[ResultType.RelevantResults];
+                propValues.Add("TotalResults", resultTable.TotalRows);
+                propValues.Add("Results", resultTable.Table.Rows.OfType&lt;DataRow&gt;());
+            }
+            if (resultTableCollection.Exists(ResultType.RefinementResults))
+            {
+                var refinersTable = resultTableCollection[ResultType.RefinementResults];
+                propValues.Add("TotalRefiners", refinersTable.TotalRows);
+                propValues.Add("Refiners", refinersTable.Table.Rows.OfType&lt;DataRow&gt;());
+            }
+        }
+
+        return propValues;
+    }
+}
+</pre>
+<p><font face="Courier New"><em>DataRowConverter</em></font>:</p><pre class="brush: csharp; collapse: true;">internal class DataRowConverter : JavaScriptConverter
+{
+    public override IEnumerable&lt;Type&gt; SupportedTypes
+    {
+        get { return new Type[] { typeof(DataRow) }; }
+    }
+
+    public override object Deserialize(IDictionary&lt;string, object&gt; dictionary, Type type,
+                                       JavaScriptSerializer serializer)
+    {
+        throw new NotImplementedException();
+    }
+
+    public override IDictionary&lt;string, object&gt; Serialize(object obj, JavaScriptSerializer serializer)
+    {
+        DataRow dataRow = obj as DataRow;
+
+        return dataRow != null
+               ? dataRow.Table.Columns.OfType&lt;DataColumn&gt;().ToDictionary(c =&gt; c.ColumnName, c =&gt; dataRow[c])
+               : new Dictionary&lt;string, object&gt;();
+    }
+}
+</pre>
+<h3>&nbsp;</h3>
+<h3>Применение</h3>
+<p>Возможность делать поисковые запросы на клиенте позволяет создавать чисто клиентские веб-части, которые не требуют для работы серверного кода. Для реализации этой идеи я реализовал одну базовую веб-часть, которая работает на jQuery и jsRender, и позволяет задавать параметры и настройки на уровне .webpart файла. Таким образом одни раз установив Farm Solution с веб-сервисом и базовой веб-частью появляется возможность добавлять веб-части с клиентским кодам в виде Sandbox решений.</p>
+<p>Пример такого решения я, как обычно, выложил на codeplex:</p>
+<p>Исходники - <a title="https://spsamples.codeplex.com/SourceControl/latest#SearchWidgetWebParts/" href="https://spsamples.codeplex.com/SourceControl/latest#SearchWidgetWebParts/">https://spsamples.codeplex.com/SourceControl/latest#SearchWidgetWebParts/</a></p>
+<p>Релиз - <a title="https://spsamples.codeplex.com/releases/view/118068" href="https://spsamples.codeplex.com/releases/view/118068">https://spsamples.codeplex.com/releases/view/118068</a></p>
+<p>Кстати это решение, в слегка измененном виде, уже больше года работает на крупном портале.</p>
+<h3>Заключение</h3>
+<p>Это последняя часть серии про использование поиска в SharePoint 2010. <a href="http://gandjustas.blogspot.com/2012/03/sharepoint-1.html" target="_blank">Часть 1</a><strong>&nbsp;</strong>и <a href="http://gandjustas.blogspot.com/2014/01/sharepoint-search-in-solutions-part-2.html" target="_blank">Часть 2</a> по ссылкам.</p>  

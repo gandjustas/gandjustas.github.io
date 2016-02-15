@@ -1,0 +1,111 @@
+---
+layout: post
+title: SharePoint + Javascript + Visual Studio = Love
+date: '2012-03-14T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- Visual Studio
+- js
+- javascript
+- SharePoint
+modified_time: '2012-03-14T10:00:03.555+04:00'
+thumbnail: http://lh4.ggpht.com/-PzViOKDDwsc/T16CJNjJU8I/AAAAAAAAAKg/uPdMh-QgFrI/s72-c/image_thumb%25255B1%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-242896804918697880
+blogger_orig_url: http://blog.gandjustas.ru/2012/03/sharepoint-javascript-visual-studio.html
+---
+
+<p>Для тех кто еще не знаком с клиентской объектной моделью SharePoint, настоятельно рекомендую <a href="http://msdn.microsoft.com/en-us/library/ee537247.aspx" target="_blank">ознакомиться с ней</a>. Client OM доступна как в C# (.NET и Silverlight), так и в Javascript. </p>  <p>.NET разработчики обычно не любят javascript, считают его убогим языком, приводящим к куче ошибок. И они в чем-то правы… Основной причиной называют динамическую типизацию и интерпретируемость javascript. На самом деле разработчика нужна не типизация и компиляция, а <em>проверка кода до запуска и подсказки по коду</em>. Обе возможности доступны в Visual Studio с расширениями.</p>  <h5>Проверка кода до запуска</h5>  <p>Для этого в галерее расширений visual studio есть два расширения:</p>  <ol>   <li><a href="http://visualstudiogallery.msdn.microsoft.com/961e6734-cd3a-4afb-a121-4541742b912e" target="_blank">JSLint</a> – встроенный в VS инструмент проверки кода javascript, который можно найти по адресу <a href="http://www.jslint.com/">http://www.jslint.com/</a> </li>    <li><a href="http://visualstudiogallery.msdn.microsoft.com/288a2b0f-1357-47b4-8215-1134c36bdf30" target="_blank">Javascript parser</a> – расширение, которое парсит js код на лету (читай <em>показывает ошибки</em>) и предоставляет навигацию по коду. </li> </ol>  <p>Эти два расширения позволяют отловить наиболее частые ошибки в коде.</p>  <p><a href="http://lh5.ggpht.com/-Ijg-8hY29vQ/T16CCg5I9TI/AAAAAAAAAKY/k5IBhNzENs4/image%25255B3%25255D.png?imgmax=800"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh4.ggpht.com/-PzViOKDDwsc/T16CJNjJU8I/AAAAAAAAAKg/uPdMh-QgFrI/image_thumb%25255B1%25255D.png?imgmax=800" width="543" height="395" /></a></p>  <p>Кроме того рекомендую установить <a href="http://visualstudiogallery.msdn.microsoft.com/872d27ee-38c7-4a97-98dc-0d8a431cc2ed" target="_blank">jscript editor extensions</a> чтобы редактор был больше похож на редактор кода C#.</p>  <h5>Подсказки по коду aka Intellisence</h5>  <p>Эта возможность доступна начиная с Visual Studio 2008, но о ней до сих пор знает катастрофически малая часть разработчиков.&#160; Чтобы intellicence для js заработал в visual studio, необходимо visual studio дать подсказку откуда брать файлы.</p>  <p>Если вы пишите javascript код в html\aspx\ascx\materpage файлах, то vs автоматически подтягивает все .js файлы из тегов script и серверного контрола ScriptManager. Далее VS парсит файлы и пытается построить подсказку по коду. Если же нужно обновить подсказку, то можно нажать ctrl+shift+j.</p>  <p>Если же код пишется в .js файле, то файлы, которые надо анализировать для построения подсказки надо указать в специальном теге:</p>  <pre class="brush: js;">///&lt;reference path=&quot;c:\scripts\jquery-1.5.1.js&quot;/&gt;</pre>
+
+<p>Имя файла можно указать любое, в том числе url с какого-либо CDN.</p>
+
+<p>В VS11 можно не указывать в каждом файле теги script или reference, а задать в настройках самой студии. Но в VS 2010 такой возможности нет.</p>
+
+<p>Также visual studio поддерживает документирующие комментарии для JS, как и для .NET языков. Подробнее описано по ссылке: <a href="http://msdn.microsoft.com/en-us/library/bb385682.aspx">http://msdn.microsoft.com/en-us/library/bb385682.aspx</a></p>
+
+<p>Подсказка по коду позволяет набирать код на javascript быстрее и без ошибок в именах классов и функций.</p>
+
+<h5>Причем здесь SharePoint?</h5>
+
+<p>Клиентская объектная модель SharePoint для JS вполне успешно понимается студией. Это помогает разработчикам писать код работы с ClientOM на js.</p>
+
+<p>Чтобы все заработало нужно подключить следующие файлы:</p>
+
+<pre class="brush: js; collapse: true;">///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\MicrosoftAjax.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\1033\init.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\1033\core.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\SP.Core.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\SP.Runtime.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\SP.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\CUI.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\SP.Ribbon.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\SP.Exp.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\SP.UI.Rte.debug.js&quot;/&gt;</pre>
+
+<p>Причем порядок файлов важен, но какой правильный – никто сказать не может, надо проверять.</p>
+
+<p>И все, дальше можно писать код на js, а студия будет подсказывать имена всех классов и функций клиентской объектной модели.</p>
+
+<p><a href="http://lh4.ggpht.com/-Hmc0FPEkG3U/T16CKzYmrmI/AAAAAAAAAKo/bpj7wQb9xPw/s1600-h/image%25255B7%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh6.ggpht.com/-pnL2M1GM4LU/T16CMMpjJyI/AAAAAAAAAKw/cZ9MWR4ytRY/image_thumb%25255B3%25255D.png?imgmax=800" width="535" height="389" /></a></p>
+
+<p><a href="http://lh3.ggpht.com/-sGdJnbehisc/T16CNqtG7wI/AAAAAAAAAK4/ZfZ8i64juyo/s1600-h/image%25255B12%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh6.ggpht.com/-3oiwcPfxKlM/T16CQrQ5opI/AAAAAAAAALA/8DBQtJCJNdw/image_thumb%25255B6%25255D.png?imgmax=800" width="535" height="393" /></a></p>
+
+<p><a href="http://lh6.ggpht.com/-2fpwVQ1dYPA/T16CR57QIJI/AAAAAAAAALI/zvrJE8gr61k/s1600-h/image%25255B18%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh6.ggpht.com/-ItQqe7euT9U/T16CTV9WMqI/AAAAAAAAALQ/Zvkrz9g4vqg/image_thumb%25255B10%25255D.png?imgmax=800" width="536" height="398" /></a></p>
+
+<p>Весь код:</p>
+
+<pre class="brush: js; collapse: true;">///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\MicrosoftAjax.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\1033\init.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\1033\core.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\SP.Core.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\SP.Runtime.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\SP.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\CUI.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\SP.Ribbon.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\SP.Exp.debug.js&quot;/&gt;
+///&lt;reference path=&quot;C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\14\TEMPLATE\LAYOUTS\SP.UI.Rte.debug.js&quot;/&gt;
+
+function showWebTitle() {
+    var ctx = SP.ClientContext.get_current();
+    var web = ctx.get_web();
+    ctx.load(web, 'Title');
+    ctx.executeQueryAsync(function () {
+        alert(web.get_title());
+    }, function myfunction(o, ex) {
+        alert(ex.get_message());
+    });
+}</pre>
+
+<h5>Развертывание скриптов</h5>
+
+<p>Самый простой способ сделать ваш скрипт доступным в SharePoint – с помощью sandboxed решения и элемента CustomAction.</p>
+
+<p>Для этого надо создать новый проект, поместить в него один элемент –модуль, поместить в него файл скрипта&#160; и написать в манифесте следующий xml:</p>
+
+<pre class="brush: xml;">&lt;Elements xmlns=&quot;http://schemas.microsoft.com/sharepoint/&quot;&gt;
+  &lt;Module Name=&quot;Module1&quot;&gt;
+  &lt;File Path=&quot;Module1\JScript1.js&quot; Url=&quot;Module1/JScript1.js&quot; /&gt;
+&lt;/Module&gt;
+
+  &lt;CustomAction Location=&quot;ScriptLink&quot;
+                ScriptSrc=&quot;~site/Module1/JScript1.js&quot;/&gt;
+&lt;/Elements&gt;</pre>
+
+<p>Далее можно нажать f5, написать прямо в строке адреса вызов функции и посмотреть результат. При этом работает интерактивная отладка в Visual Studio.</p>
+
+<p><a href="http://lh3.ggpht.com/-aMyQyLDMJ40/T16CWItUXaI/AAAAAAAAALY/Gav_bdRr7W4/s1600-h/image%25255B26%25255D.png"><img style="background-image: none; border-bottom: 0px; border-left: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top: 0px; border-right: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh4.ggpht.com/-20Hab_ojVNI/T16CXsrnv3I/AAAAAAAAALg/TZ25HK6-NEU/image_thumb%25255B14%25255D.png?imgmax=800" width="536" height="409" /></a></p>
+
+<h5>Скрипты в веб-частях</h5>
+
+<p>Если вы собираетесь писать скрипты в веб-частях, то вы можете написать кучу тегов script, аналогично reference, но это приведет к загрузке всех файлов при размещении веб-части на форме, что нежелательно.</p>
+
+<p>Есть очень хороший способ с этим бороться:</p>
+
+<p><a href="http://lh5.ggpht.com/-zjsuI1iGKKw/T16CaOJiTkI/AAAAAAAAALo/uMry5LtCcCk/s1600-h/image%25255B33%25255D.png"><img style="background-image: none; border-bottom: 0px; border-left: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top: 0px; border-right: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh3.ggpht.com/-hixA-vYweXw/T16Cbg-Ou3I/AAAAAAAAALw/0sZwy7UMzIk/image_thumb%25255B17%25255D.png?imgmax=800" width="558" height="348" /></a></p>
+
+
+
+<p>Директивы условной компиляции приведут к тому что теги script не попадут в результрующую разметку, а VisualStudio игнорирует эти директивы и нормально показывает intellisence.</p>
+
+<h5>Заключение</h5>
+
+<p>Несмотря на то что javascript очень недружественный к разработчику язык, хорошие инструменты позволяют писать на нем с тем же уровнем комфорта, как на .NET языках.</p>  

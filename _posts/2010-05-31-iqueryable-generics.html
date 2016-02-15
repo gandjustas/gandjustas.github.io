@@ -1,0 +1,111 @@
+---
+layout: post
+title: IQueryable и Generics
+date: '2010-05-31T00:51:00.001+04:00'
+author: "Станислав Выщепан"
+tags:
+- Linq
+- ".NET"
+modified_time: '2010-05-31T01:46:24.985+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-851381302278129481
+blogger_orig_url: http://blog.gandjustas.ru/2010/05/iqueryable-generics.html
+---
+
+<p>Довольно часто различные сущности данных обладают сходными свойствами и обрабатываются одинаково. При обработке объектов в программе общность&#160; выражается интерфейсами, а обработка производится обобщенными методами (generics).</p>  <p>При использовании Linq можно написать аналогично</p>  <pre class="brush: csharp;">/// &lt;summary&gt;
+/// Интерфейс для всех сущностей,
+/// которые могут не показываться позьзователю
+/// &lt;/summary&gt;
+public interface IVisible
+{
+    bool Visible { get; set; }
+}
+
+/// &lt;summary&gt;
+/// Выбор только видимых сущностей
+/// &lt;/summary&gt;
+public static class IVisibleExtensions
+{
+    public static IQueryable&lt;T&gt; Visible&lt;T&gt;(this IQueryable&lt;T&gt; q) 
+        where T : IVisible
+    {
+        return q.Where(o =&gt; o.Visible);
+    }
+}</pre>
+
+<p>Потом можно создать модель данных (я использую EF), сделать сущности с полем Visible и с помощью partial-класса «прицепить» интерфейс к сущности</p>
+
+<pre class="brush: csharp;">/// &lt;summary&gt;
+/// Какая-то сущность
+/// &lt;/summary&gt;
+public partial class Entity1 : IVisible
+{
+}</pre>
+
+<p>Теперь тестовый код…</p>
+
+<pre class="brush: csharp;">static void Main(string[] args)
+{
+    var context = new Model1Container();
+    foreach (var item in context.Entity1Set.Visible())
+    {
+        Console.WriteLine(item);
+    }
+}</pre>
+
+<p>Этот код отваливается с ошибкой  <em>Unable to cast the type 'Entity1' to type 'IVisible'. LINQ to Entities only supports casting Entity Data Model primitive types.</em></p>
+
+<p>Проблема заключается в том что выражения o.Visible внутри generic метода Visible&lt;T&gt; преобразуется в expression tree вида <br />((IVisible)o).Visible. Linq2EF (как и другие Linq-провайдеры) не понимают что делать с типом IVisible и генерация SQL-выражения падает.</p>
+
+<p>Можно конечно собирать expression нужного вида руками для каждого обобщенного метода обработки запроса, но это не наш путь.</p>
+
+<p>Лучше написать метод, который устраняет очевидно лишние приведения типов в expression. Для этого сделаем extension-метод Fix.</p>
+
+<pre class="brush: csharp;">public static IQueryable&lt;T&gt; Fix&lt;T&gt;(this IQueryable&lt;T&gt; q)
+{
+    var visitor = new FixupVisitor();
+    return q.Provider.CreateQuery&lt;T&gt;(visitor.Visit(q.Expression));
+}</pre>
+
+<p>Теперь осталось написать FixupVisitor. В .NET 4 включен класс ExpressionVisitor в пространстве имен System.Linq.Expressions, который поддерживает в том числе расширенные деревья выражений. Для .NET 3.5 можно взять <a href="http://iqtoolkit.codeplex.com">IQToolkit</a>.</p>
+
+
+<pre class="brush: csharp;">internal class FixupVisitor: ExpressionVisitor
+{
+    protected override Expression VisitUnary(UnaryExpression u)
+    {
+        if (u.NodeType != ExpressionType.Convert)
+        {
+            return base.VisitUnary(u);
+        }
+
+        var operandType = u.Operand.Type;
+        var expressionType = u.Type;
+        if (expressionType.IsInterface 
+            &amp;&amp; operandType.GetInterfaces()
+                          .Contains(expressionType))
+        {
+            return base.Visit(u.Operand);
+        }
+        else
+        {
+            return base.VisitUnary(u);
+        }
+    }
+}</pre>
+
+<p>Этот визитор просто выкидывает избыточное приведение типа к интерфейсу.</p>
+
+<p>Еще один тестовый код</p>
+
+<pre class="brush: csharp;">static void Main(string[] args)
+{
+    var context = new Model1Container();
+    foreach (var item in context.Entity1Set.Visible().Fix())
+    {
+        Console.WriteLine(item);
+    }
+}</pre>
+
+<p>Добавился только вызов Fix в конце и все работает.</p>
+
+<p>Продолжение следует…</p>  

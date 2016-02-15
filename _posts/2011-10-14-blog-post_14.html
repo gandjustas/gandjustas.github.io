@@ -1,0 +1,176 @@
+---
+layout: post
+title: "Решение задач. Задача таймера, совсем конец."
+date: '2011-10-14T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- js
+- SharePoint
+modified_time: '2011-10-14T10:00:01.754+04:00'
+thumbnail: http://lh5.ggpht.com/-DPcegq02HtU/Tpe60bwUtWI/AAAAAAAAAF4/4rPd_tRfJ14/s72-c/image_thumb%25255B1%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-2516194930425709393
+blogger_orig_url: http://blog.gandjustas.ru/2011/10/blog-post_14.html
+---
+
+<p>Посты в этой серии:</p>  <ol>   <li><a href="http://gandjustas.blogspot.com/2011/08/sharepoint.html">Список задач для проверки навыков</a>. </li>    <li><a href="http://gandjustas.blogspot.com/2011/10/blog-post.html">Создание задачи таймера</a>. </li>    <li><a href="http://gandjustas.blogspot.com/2011/10/blog-post_11.html">Использование подходящих классов</a>. </li>    <li><a href="http://gandjustas.blogspot.com/2011/10/blog-post_13.html" target="_blank">Передача команд задаче таймера</a>. </li>    <li>Взаимодействие веб-фронтэнда с задачами таймера (<em>этот пост</em>). </li> </ol>  <p>В <a href="http://gandjustas.blogspot.com/2011/10/blog-post_13.html" target="_blank">прошлом посте</a> был показан способ создать worker, который будет получать сообщения от frontend и обрабатывать их.</p>  <p>Теперь необходимо придумать как оправлять эти сообщения. В 2010 есть почти универсальный способ для размещения функционала – Ribbon. Даже если у вас возникает непреодолимое желание сделать ссылку\кнопку\пункт меню в другом месте, то скорее всего для целей usability надо будет повторить его в ribbon.</p>  <p>Для того чтобы добавить кнопку в ribbon надо создать custom action, я для этого использую <a href="http://cksdev.codeplex.com/" target="_blank">cks:dev</a>. Руководство по расширению риббона можно найти как <a href="http://msdn.microsoft.com/en-us/library/gg552606.aspx" target="_blank">на MSDN</a>, так и в <a href="http://www.wictorwilen.se/Post/Creating-a-SharePoint-2010-Ribbon-extension-part-1.aspx" target="_blank">блогах</a> <a href="http://www.sharemuch.com/2009/12/16/extending-sharepoint-2010-ribbon/" target="_blank">глубоко</a>&#160;<a href="http://www.sharemuch.com/2009/12/16/extending-sharepoint-2010-ribbon/" target="_blank">уважаемых</a> <a href="http://www.sharepointnutsandbolts.com/2010/01/customizing-ribbon-part-1-creating-tabs.html" target="_blank">людей</a> (надеюсь меня не забанят за такое количество ссылок).</p>  <p>Мой код получился такой:</p>  <pre class="brush: xml;">&lt;CustomAction Id=&quot;CleanupLibraryButton&quot;
+              Title=&quot;Cleanup&quot;
+              RegistrationType=&quot;List&quot;
+              RegistrationId=&quot;101&quot;
+              Location=&quot;CommandUI.Ribbon&quot;&gt;
+  &lt;CommandUIExtension&gt;
+    &lt;CommandUIDefinitions&gt;
+      &lt;CommandUIDefinition Location=&quot;Ribbon.Library.Settings.Controls._children&quot;&gt;
+        &lt;Button Id=&quot;Ribbon.Library.Settings.Cleanup&quot;
+                Command=&quot;CleanupLibraryCommand&quot;
+                TemplateAlias=&quot;o2&quot;
+                LabelText=&quot;Cleanup&quot;
+                Sequence=&quot;100&quot;
+                Image16by16=&quot;/_layouts/images/warning16by16.gif&quot;
+                Image32by32=&quot;/_layouts/images/CRIT_32.GIF&quot;                   
+                /&gt;
+      &lt;/CommandUIDefinition&gt;
+    &lt;/CommandUIDefinitions&gt;
+    &lt;CommandUIHandlers&gt;
+      &lt;CommandUIHandler Command=&quot;CleanupLibraryCommand&quot; 
+                        CommandAction=&quot;???&quot;/&gt;
+    &lt;/CommandUIHandlers&gt;
+  &lt;/CommandUIExtension&gt;
+&lt;/CustomAction&gt;</pre>
+
+<p>Немного громоздко, но если разобраться в <a href="http://msdn.microsoft.com/en-us/library/ff458369.aspx" target="_blank">схеме</a>, то довольно очевидно. Кнопка добавляется в последнюю группу кнопок на закладке “Билиотека”.</p>
+
+<p>Теперь самый интересный вопрос, что написать в CommandAction, где я в схеме поставил вопросы. </p>
+
+<p>Самый прямолинейный способ – указать ссылку на application page, который вызовет site.AddWorkItem, но это кардинально противоречит самой идее ribbon.</p>
+
+<p>&#160;</p>
+
+<h5>SharePoint 2007 way</h5>
+
+<p>В SharePoint 2007 часто применялся delegate control, и действия в интерфейсе выполняли postback, а этот самый контрол обрабатывал форму и производил действия.</p>
+
+<p>Для начала добавлю еще один cutom action с location равным ScriptLink. В таком custom action можно размещать ссылку на javascript или блок кода, который будет выведен на каждой странице.</p>
+
+<pre class="brush: xml;">&lt;CustomAction 
+    Location=&quot;ScriptLink&quot;
+    ScriptSrc=&quot;~site/_layouts/CleanupTimerJob/script.js&quot; /&gt;</pre>
+
+<p>Команда для ribbon будет выглядеть так:</p>
+
+<pre class="brush: xml;">&lt;CommandUIHandler 
+    Command=&quot;CleanupLibraryCommand&quot; 
+    CommandAction=&quot;javascript:submitLibraryToCleanup()&quot;/&gt;</pre>
+
+<p>В самом же js файле будет простой код:</p>
+
+<pre class="brush: js;">function submitLibraryToCleanup() {
+    var listId = SP.ListOperation.Selection.getSelectedList();
+    if (listId) {
+        __doPostBack('CleanupPostBackEvent', listId);
+    }
+}</pre>
+
+<p>SP.ListOperation.Selection – класс, позволяющий получать данные о текущем представлении списка. Представлений списка на странице может быть больше одного, а ribbon – один.</p>
+
+<p>Функция __doPostBack создается веб-формами, в первом параметре обычно указывается id элемента управления, которому адресуется postback, а во втором передаются параметры. Но узнать id нашего delegate control (который будет ниже) не представляется возможным, поэтому требуется заранее определенная константа и ручной анализ в теле контрола.</p>
+
+<p>Сам контрол:</p>
+
+<pre class="brush: csharp;">[Guid(&quot;0a3b8df1-0a43-485d-be83-983c1df8b30d&quot;)]
+public class PostbackHandler : WebControl
+{
+    protected override void OnLoad(EventArgs e)
+    {
+        if (this.Page.Request[&quot;__EVENTTARGET&quot;] == Constants.CleanupPostBackEvent)
+        {
+            var listId = new Guid(this.Page.Request[&quot;__EVENTARGUMENT&quot;]);
+            var web = SPContext.Current.Web;
+                            
+            SPSecurity.RunWithElevatedPrivileges(() =&gt;
+                {
+                    using (var site = new SPSite(SPContext.Current.Site.ID))
+                    {
+                        site.AddWorkItem(
+                            new Guid(), DateTime.UtcNow, Constants.WorkItemType,
+                            web.ID, listId, -1,
+                            true, new Guid(), web.ID,
+                            web.CurrentUser.ID, null, null, new Guid());
+                    }
+                });
+        }
+    }
+}</pre>
+
+<p>Основное внимание стоит уделить функции <a href="http://msdn.microsoft.com/en-us/library/ms476803.aspx" target="_blank">AddWorkItem</a>. Во-первых её необходимо вызывать с правами администратора семейства сайтов, иначе будет ошибка. Во-вторых при указании времени доставки WorkItem необходимо указывать время в формате UTC. В-третьих, даже если не используются параметры listItemId и&#160; userId, то все равно надо указывать ненулевые значения иначе SharePoint попытается записать в базу null, что приведет к ошибке так как эти поля not null. И в-четвертых лучше всего указывать batchId, такой же как у webId, если нет других соображений. Судя по документации msdn и реализации <a href="http://msdn.microsoft.com/en-us/library/microsoft.office.server.utilities.timerjobutility.aspx" target="_blank">TimerJobUtility</a> это может сэкономить ресурсы.</p>
+
+<p>Чтобы ваш delegate control заработал необходимо добавить элемент в фичу. Здесь также поможет <a href="http://cksdev.codeplex.com/">cks:dev</a>, в нем уже есть шаблон. </p>
+
+<pre class="brush: xml;">&lt;Control Id=&quot;AdditionalPageHead&quot; 
+         Sequence=&quot;1000&quot; 
+         ControlAssembly=&quot;$SharePoint.Project.AssemblyFullName$&quot; 
+         ControlClass=&quot;$SharePoint.Type.0a3b8df1-0a43-485d-be83-983c1df8b30d.FullName$&quot; /&gt;</pre>
+
+<p>Но сразу после развертывания этого элемента контрол не заработает, нужно еще добавить класс в safecontrols в web.config. Ни в коем случае не надо писать модификацию конфига самостоятельно, для этого уже есть инструменты в студии.</p>
+
+<p><a href="http://lh4.ggpht.com/-KRUJ2AlXwVk/Tpe6zVULmcI/AAAAAAAAAFw/4fc2Tm78egw/s1600-h/image%25255B3%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh5.ggpht.com/-DPcegq02HtU/Tpe60bwUtWI/AAAAAAAAAF4/4rPd_tRfJ14/image_thumb%25255B1%25255D.png?imgmax=800" width="452" height="390" /></a></p>
+
+<p>Ну вот и все…</p>
+
+<h5>SharePoint 2010 way</h5>
+
+<p>Если сделать как написано выше, то нажатие на кнопку приведет к постбеку, то есть перезагрузке всей странице. Хотя, учитывая архитектуру, пользователь сразу не увидит изменений в любом случае. Поэтому необходим ajax, обязательно с feedback пользователю.</p>
+
+<p>Для этого нужно сделать: веб-сервис в sharepoint, который обработает запрос и поменять script.js, чтобы он вызывал этот веб-сервис. </p>
+
+<p>Чтобы сделать веб-сервис снова нужно воспользоваться <a href="http://cksdev.codeplex.com/">cks:dev</a> с готовым шаблоном. В готов шаблоне надо поменять в svc файле тип фабрики с MultipleBaseAddressBasicHttpBindingServiceHostFactory на MultipleBaseAddressWebServiceHostFactory чтобы можно было вызывать методы сервиса из js.</p>
+
+<p>Выкинув все лишнее можно получим до безобразия простой сервис:</p>
+
+<pre class="brush: csharp;">[Guid(&quot;36471285-d168-49ea-b191-6c83cfe1fe3e&quot;)]
+[AspNetCompatibilityRequirements(RequirementsMode = AspNetCompatibilityRequirementsMode.Required)]
+[ServiceContract]
+public class CleanupService
+{
+    [OperationContract]
+    [WebInvoke(
+        UriTemplate = &quot;/SubmitLibraryToCleanup({listId})&quot;,
+        BodyStyle = WebMessageBodyStyle.Bare,
+        RequestFormat = WebMessageFormat.Json,
+        ResponseFormat = WebMessageFormat.Json)]
+    public void SubmitLibraryToCleanup(string listId)
+    {
+        CleanupUtility.AddCleanupWorkitem(SPContext.Current.Web, new Guid(listId));
+    }
+}</pre>
+
+<p>Как видите, большую часть сервиса занимают атрибуты. Метод вызывается с помощью POST, параметры передаются прямо в строке запроса.</p>
+
+<p>Далее необходимо в script.js файле поправить метод <em>submitLibraryToCleanup</em> чтобы он вызывал веб-сервис.</p>
+
+<p><strong>ВНИМАНИЕ.</strong> Приведенный далее код работает, но крайне не рекомендую использовать его в своих решениях. Используйте более человеческие библиотеки, вроде jQuery.</p>
+
+<pre class="brush: js;">function submitLibraryToCleanup(isOldSchool) {
+    var listId = SP.ListOperation.Selection.getSelectedList();
+    if (listId) {
+        var notification = null;
+        var request = new Sys.Net.WebRequest();
+        request.set_url(GetWebUrl() + &quot;_vti_bin/CleanupTimerJob/CleanupService.svc/SubmitLibraryToCleanup(&quot;+listId+&quot;)&quot;);
+        request.set_httpVerb(&quot;POST&quot;);
+        request.add_completed(function(executor, eventArgs) {
+            SP.UI.Notify.removeNotification(notification);
+            SP.UI.Notify.addNotification(&quot;Done&quot;,false);
+        });             
+        notification = SP.UI.Notify.addNotification(&quot;Submitting library to cleanup&quot;,true);
+        request.invoke();
+    }
+}</pre>
+
+<p>Этот код использует так называемую Microsoft Ajax Library для выполнения запроса на сервер, и методы Client OM SharePoint для отображения оповещений.</p>
+
+<p>Функция GetWebUrl скопирована <a href="http://blog.tedpattison.net/Lists/Posts/Post.aspx?ID=12" target="_blank">отсюда</a>.</p>
+
+<h5></h5>
+
+<h5>Заключение</h5>
+
+<p>Надеюсь вы все таки дочитали до сюда и узнали что-то новое. Весь код можно найти на <a href="http://spsamples.codeplex.com" target="_blank">spsamples.codeplex.com</a></p>  

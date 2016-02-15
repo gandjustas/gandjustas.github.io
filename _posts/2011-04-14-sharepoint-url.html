@@ -1,0 +1,33 @@
+---
+layout: post
+title: SharePoint и Url форм
+date: '2011-04-14T15:18:00.001+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint
+modified_time: '2012-01-17T11:26:40.731+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-3980426231614130564
+blogger_orig_url: http://blog.gandjustas.ru/2011/04/sharepoint-url.html
+---
+
+<p>Постоянно вижу вопрос на форумах: “Как в SPD сделать ссылку на элемент списка?”</p>  <p>Ответ: Используйте listform.aspx</p>  <pre class="brush: xml;">{webUrl}/_layouts/listform.aspx?ListId={ListId}<br />                               &amp;PageType={PageType}<br />                               &amp;ContentTypeId={CTId}<br />                               &amp;ID={ItemId}</pre>
+
+<ul>
+  <li>webUrl – урл сайта </li>
+
+  <li>ListId – GUID списка </li>
+
+  <li>PageType – тип формы, число, возможные значения <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.pagetype.aspx">тут</a> </li>
+
+  <li>CTId – идентификатор типа содержимого, необязательный параметр, необходим для формы нового элемента </li>
+
+  <li>ItemId – ID элемента списка, необязательный параметр, необходим для форм отображения и редактирования </li>
+
+  <li>Также можно дописывать свои параметры в url, они передадутся форме</li>
+</ul>
+
+<p>При создании форм в SPD в качестве адреса listform.aspx можно указывать выражение</p>
+
+<pre class="brush: xml;">&lt;%$SPUrl:~site/_layouts/listform.aspx%&gt;</pre>
+
+<p>Таким способом можно указывать только формы и представления по-умолчанию. Для специализированных форм и представлений можно прописать прямой URL.</p>

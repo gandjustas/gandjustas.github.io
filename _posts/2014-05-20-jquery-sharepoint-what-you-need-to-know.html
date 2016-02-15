@@ -1,0 +1,98 @@
+---
+layout: post
+title: 10 вещей, которые надо знать при использовании jQuery в SharePoint
+date: '2014-05-20T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint 2013
+- js
+- sp2013
+- javascript
+- spcafcontib
+- jQuery
+- SharePoint
+modified_time: '2014-05-21T10:36:48.964+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-4947842854909579608
+blogger_orig_url: http://blog.gandjustas.ru/2014/05/jquery-sharepoint-what-you-need-to-know.html
+---
+
+<p>Для чего нужен jQuery в SharePoint? Обычно его используют для четырех целей:  <ul> <li>Вызывать код JavaScript в момент загрузки страницы с помощью $(document).ready.  <li>Использовать Ajax функции для доступа к данным на сервере.  <li>Использовать готовые плагины,такие как <a href="http://jqueryui.com/tooltip/" target="_blank">tooltip</a> или <a href="http://jqueryui.com/tabs/" target="_blank">tabs</a>, для того, чтобы расширить функционал сайта.  <li>Проводить некоторые манипуляции с объектной модели документа (DOM).</li></ul> <p>Если Вы собираетесь использовать jQuery на страницах SharePoint, то вам нужно знать следующие вещи:&nbsp;&nbsp; <p>&nbsp; <h3>1. Используйте mQuery и RequestExecutor в простых случаях</h3> <p>Если у вас простой случай, то Вы можете использовать библиотеку <a href="http://gandjustas.blogspot.com/2013/07/mquery-sharepoint-2013.html" target="_blank">mQuery</a> для манипуляции DOM и <a href="http://gandjustas.blogspot.com/2013/07/sharepoint-ajax.html" target="_blank">RequestExecutor</a> для ajax запросов. Кроме того, вместо Ajax запросов гораздо выгоднее использовать JSOM и TypeScript для клиентской разработки. Об этом я <a href="http://gandjustas.blogspot.com/2013/08/sharepoint-app-typescript.html" target="_blank">писал ранее</a>.</p> <p>Если Вы, все таки, решили использовать jQuery, то вам нужно помнить следующее:</p> <h3>2. jQuery(document).ready срабатывает не вовремя</h3> <p>Это происходит потому, что $(document).ready взрывается при событии <em>DOMContentLoaded</em>. А это события создано для тех случаев, когда весь контент страницы загружается с сервера. Оно происходит после того как браузер скачал всю страницу, связанные файлы и всё распарсил. SharePoint использует механизмы динамического формирования страницы, когда скрипты в теле страницы запускаются и формируют части страницы. В этом случае использовать <em>DOMContentLoaded</em>, отрабатывает до того как сформирована страница. Гораздо более надежный способ вызова после загрузки страницы – с помощью события<em> body.onload</em>. Для этого в SharePoint есть готовые функции.  <p>&nbsp; <h3>3. Используйте _spBodyOnLoadFunctions или _spBodyOnLoadFunctionNames</h3> <p>Эти два массива (да-да, обычные JS массивы). <em>_spBodyOnLoadFunctionNames</em> содержит имена глобальных функций, которые необходимо вызвать на событие <em>body.onload</em>. <em>_spBodyOnLoadFunctions</em> содержит объекты-функции, что гораздо удобнее, но доступно только в SharePoint 2013. Кроме того есть переменная <em>_spBodyOnLoadCalled</em>, которая равна <em>true</em>, если функции уже были выполнены.</p> <p>Пример:</p><pre class="brush: js; ">(function() {
+    if (!_spBodyOnLoadCalled) {
+        _spBodyOnLoadFunctions.push(pageLoad);
+    } else {
+        pageLoad();
+    }
+
+    function pageLoad() {
+        //onload code
+    }
+})();</pre>
+<h3>4. Используйте RegisterModuleInit</h3>
+<p>Если у вас на сайте используется Minimal Download Strategy (MDS), то вам необходимо написать дополнительный код, чтобы вызывать функцию при каждой асинхронной загрузке страницы. MDS был создан для того, чтобы загружать не полностью страницу сервера, а только изменившуюся часть. В этом случае не происходит полная загрузка страницы и не вызывается событие <em>body.onload</em>. Для того, чтобы ваш код работал, вам необходимо вызвать функцию <em>RegisterModuleInit</em>, в которую передать имя скрипта и функцию, которая будет вызвана при асинхронной загрузке. 
+<p>Пример кода загрузки с учетом <pre class="brush: js; ">(function() {
+    if (!_spBodyOnLoadCalled) {
+        _spBodyOnLoadFunctions.push(pageLoad);
+    } else {
+        pageLoad();
+    }
+
+    function pageLoad() {
+        //onload code
+    }
+
+    RegisterModuleInit(
+        _spPageContextInfo.webServerRelativeUrl 
+            + 'appname/script.js', 
+        pageLoad);
+})();</pre>
+<h3>5. Для подключения jQuery используйте CustomAction ScriptLink</h3>
+<p>Не используйте другие способы, не трогайте masterpage, не создавайте ссылки в разметке. Чтобы поместить jQuery на все страницы сайта надо использовать следующий элемент в фиче:<pre class="brush: xml; ">&lt;CustomAction 
+    Location="ScriptLink" 
+    ScriptSrc="~site/AppName/jquery.js" 
+    Sequence="10001"/&gt;
+
+</pre>
+<p>Этот код код добавляет ссылку на скрипт в тег head каждой страницы сайта. Он автоматически добавляет дополнительный параметр в url, который изменяется при изменении версии фичи.
+<p>Параметр <em>Sequence</em> позволяет управлять в каком порядке добавляются ссылки на скрипты.
+<p>Сам файл jQuery и скрипты размещайте в корне коллекции сайтов в папке с именем вашего приложения. И не забудьте включить <em>BlobCache</em>. Если Вы добавите такой элемент в фичу уровня Site, то jQuery будет добавлен также на все страницы всех подсайтов. 
+<p>Но нужно помнить, что при подключении jQuery возникают проблемы:
+<p>&nbsp; <h3>6. jQuery ломает Asset Picker</h3>
+<p>Переменная $, определяемая в jQuery, конфликтует с именем переменной в диалоге выбора актива сайта (Asset Picker). В результате Asset Picker не работает после подключения jQuery.</p>
+<h3>7. jQuery в разных решениях будут конфликтовать друг с другом</h3>
+<p>Другая проблема, которая не просто часто, а постоянно встречается, заключается в том, что разные компоненты разных вендоров ставят jQuery. Это приводит к тому, что последняя версия перетирает все предыдущие.</p>
+<p>Для этой и предыдущей проблемы есть решение:</p>
+<h3>8. Используйте jQuery.noConflict(true)</h3>
+<p>Эта функция делает две вещи:</p>
+<ul>
+<li>Восстанавливает переменную $</li>
+<li>При указании <em>true</em> в качестве параметра восстанавливает старое значение jQuery.</li></ul>
+<p>Сама функция возвращает текущий объект jQuery, который Вы можете сохранить в переменной.</p>
+<h3>9. Используйте IIFE</h3>
+<p>Для того, чтобы было удобно писать и копипастить из интернета код с jQuery удобно использовать <em>Immediately-Invoked Function Expression</em> (IIFE). По сути это объявление анонимной функции, совмещенное с вызовом. Выше я уже приводил пример кода с IIFE, но при использовании параметров можно сделать еще более удобный код:</p><pre class="brush: js; ">window.myappName$ = window.myappName$ 
+                    || jQuery.noConflict(true);
+
+(function($) {
+    if (!_spBodyOnLoadCalled) {
+        _spBodyOnLoadFunctions.push(pageLoad);
+    } else {
+        pageLoad();
+    }
+
+    function pageLoad() {
+        $('#pageTitle span').text('Hello from jQuery');
+    }
+
+    RegisterModuleInit(
+            _spPageContextInfo.webServerRelativeUrl 
+                + 'appname/script.js', 
+            pageLoad);
+})(window.myappName$);</pre>
+<p>Таким образом внутри вашего кода, Вы сможете использовать обычный jQuery код без извращений и конфликтов с другим решениями и частями SharePoint.</p>
+<h3>&nbsp;</h3>
+<h3>10. Используйте SPCop или R# c spcafcontrib</h3>
+<p>Последний совет - используйте инструменты SPCop\SPCAF и R# (ReSharper) с расширением SPCAFContrib. </p>
+<p>Для SPCop\SPCAF расширение доступно на сайте <a title="http://spcafcontrib.codeplex.com/" href="http://spcafcontrib.codeplex.com/">http://spcafcontrib.codeplex.com/</a></p>
+<p>Для R# плагин можно поставить из галереи расширений</p>
+<p><img style="border-top: 0px; border-right: 0px; background-image: none; border-bottom: 0px; padding-top: 0px; padding-left: 0px; border-left: 0px; padding-right: 0px" border="0" src="https://fbcdn-sphotos-b-a.akamaihd.net/hphotos-ak-prn1/t31.0-8/10317806_1473956039505184_4511337105840925304_o.jpg" width="560" height="224"></p>
+<p>Расширение содержит правила, которые находят неправильное использование jQuery в SharePoint проектах. В R# также есть возможность чинить неверный код автоматически (эта функциональность сейчас в процессе разработки).</p>
+<p>Это расширение создается в основном Дмитрием Долотовских (страна должна знать своих героев), ему помогают Антон Вишняков, Алексей Большаков и я.</p>  

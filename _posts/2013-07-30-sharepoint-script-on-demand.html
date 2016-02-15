@@ -1,0 +1,106 @@
+---
+layout: post
+title: SharePoint Script On Demand
+date: '2013-07-30T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- js
+- sp2013
+- javascript
+- SharePoint
+modified_time: '2013-07-30T10:00:06.717+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-4926548847581655830
+blogger_orig_url: http://blog.gandjustas.ru/2013/07/sharepoint-script-on-demand.html
+---
+
+<p>В SharePoint 2013 довольно богатая клиентская библиотека. Ранее я уже <a href="http://gandjustas.blogspot.com/2013/07/mquery-sharepoint-2013.html" target="_blank">писал об аналоге jQuery</a> и об <a href="http://gandjustas.blogspot.com/2013/07/sharepoint-ajax.html" target="_blank">Ajax библиотеках</a>. Одна из важнейших частей для разработки масштабного JavaScipt приложения – загрузчик скриптов. Такое тоже есть в SharePoint.</p> <h3>Почему необходимо управлять загрузкой скриптов</h3> <p>Исторически управление загрузкой скриптов появилось для увеличения быстродействия. Вы наверное знаете, что тег script в теле страницы заставляет браузер останавливать отрисовку страницы. Поэтому скрипты надо загружать как можно позже. Кроме того, в сложных приложениях, все скрипты не нужны на каждой странице, поэтому выгодно загружать их по требованию.</p> <p>Но важнейшая задача управления загрузкой скриптов – создание полноценной модульности для javascript. Ведь сам язык не предоставляет инструмента описания связей между модулями и гарантий, что зависимости будут загружены до выполнения скрипта.</p> <p>Обе причины особенно важны в SharePoint. Страницы SharePoint тяжелые, и лучше загружать скрипты как можно позже. Сами же страницы строятся из кучи независимых компонент (созданных разными разработчиками), поэтому модульность скриптов важна как нигде.</p> <p>В мире веб-разработки фактически стандарт для управляемой загрузки скриптов – библиотека<em> </em><a href="http://requirejs.org/" target="_blank"><em>requirejs</em></a>. Но в ней есть критический недостаток, её придумал не Microsoft, поэтому в SharePoint своя библиотек для загрузки скриптов. Называется она <strong>Script On Demand</strong>.</p> <h3>Script On Demand</h3> <p>Вся библиотека содержится в классе <em>SP.SOD</em> в файле <em>init.js</em>. Script On Demand спроектирован как неинтрузивная библиотека, в отличие от <em>requirejs</em>, то есть скрипты будут работать и без нее. Это важно в App Parts, которые по сути отдельные страницы в <em>iframe</em>. Там нет смысла откладывать загрузку скриптов.</p> <p>Документация по <em>SP.SOD</em> есть на MSDN, но она там, мягко говоря, ужасная. В проекте <a href="http://sptypescript.codeplex.com/" target="_blank"><strong>SPTypeScript</strong></a> есть качественные определения типов для <em>SP.SOD</em>, они будут более полезны (<a title="SP.Init.d.ts" href="http://sptypescript.codeplex.com/SourceControl/latest#Definitions/SP.Init.d.ts">SP.Init.d.ts</a>).</p> <h3>Добавление скриптов на страницу</h3> <p>Есть серверный контрол<em> </em><a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.webcontrols.scriptlink.aspx" target="_blank"><em>ScriptLink</em></a>, который позволяет указать в разметке aspx страницы скрипт. По умолчанию скрит будет загружаться сразу же, но асинхронно, то есть не будет блокировать рисование страницы. </p> <p>У контрола <em>ScriptLink</em> несколько атрибутов:</p> <ul> <li><strong>Name</strong> – указывает имя скрипта. Если указать только имя файла, то скрипт будет загружаться из <em>_layouts</em>. Поддерживаются url tokens, такие как <em>~site</em> и <em>~sitecollection</em>.  <li><strong>Localizable</strong> – если стоит значение <strong>true</strong> и указано только имя скрипта, то скрипт будет за загружаться из <em>_layouts/{langId}</em>.  <li><strong>LoadAfterUI</strong> – если стоит значение <strong>true</strong>, скрипт будет добавлен в конец страницы (независимо от местоположения контрола <em>ScriptLink</em>) и загрузка начнется после рисования всего интерфейса.  <li><strong>OnDemand</strong> – если указано значение <strong>false</strong> или атрибут отсутствует, то генерируется такая разметка:<br><pre class="brush: js;">&lt;script type="text/javascript"&gt;
+// &lt;![CDATA[
+document.write(
+    '&lt;script type="text/javascript" src="script.js"&gt;&lt;/' 
+    + 'script&gt;');
+// ]]&gt;
+&lt;/script&gt;
+
+</pre>Если же указано значение <strong>true</strong>, то генерируемый код такой: <br><pre class="brush: js;">&lt;script type="text/javascript"&gt;
+RegisterSod("script.js", "script.js");
+&lt;/script&gt;
+
+</pre>Метод <em>RegisterSod</em> это <em>SP.SOD.registerSod. </em>Загрузка такого скрипта не начнется, пока не будет вызвана явно с помощью класса <em>SP.SOD</em>.</li></ul>
+<p>Если вы делаете серверную веб-часть или контрол без разметки, то вам могут пригодиться статические методы класса <em>ScriptLink</em>:</p>
+<ul>
+<li><a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.webcontrols.scriptlink.registerscriptafterui.aspx">ScriptLink.RegisterScriptAfterUI</a> – аналогичен <em>LoadAfterUI=true</em> 
+<li><a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.webcontrols.scriptlink.registerondemand.aspx">ScriptLink.RegisterOnDemand</a> – аналогичен <em>OnDemand=true</em></li></ul>
+<p>К сожалению класс <em>ScriptLink</em> не доступен в Sandbox, поэтому обязательно необходимо пользоваться классом <em>SP.SOD</em>.</p>
+<p><strong>Внимание</strong>: никогда в веб-частях и контролах не генерируйте тег <em>script</em> с атрибутом <em>src</em>. Ваш контрол или веб-часть могут быть добавлены более одного раза на страницу и скрипты будут загружаться несколько раз. Если же вы вызовете <em>SP.SOD.registerSod</em> несколько раз, то скрипт будет загружен только один раз (свойство <em>идемпотентности</em>).</p>
+<h5>SP.SOD.registerSod(fileName: string, url: string): void;</h5>
+<p>В первом параметре указывается имя зависимости, а во втором – url скрипта.</p>
+<h3>Ожидание загрузки скрипта</h3>
+<p>Если вы воспользовались <em>ScriptLink</em> с атрибутом <em>OnDemand=<strong>false</strong></em>, и вам надо дождаться окончания его загрузки, чтобы вызвать свой код, то вам нужен метод</p>
+<h5>SP.SOD.executeOrDelayUntilScriptLoaded(func: () =&gt; void , depScriptFileName: string): bool</h5>
+<p>В параметрах метода необходимо указать коллбек, который будет вызван после загрузки скрипта. Функция возвращает булево значение, означающее был ли вызван коллбек.</p>
+<p>Вызов этой функции часто нужен для ожидания окончания загрузки файла <em>sp.js</em>, содержащего JSOM.</p><pre class="brush: js;">SP.SOD.executeOrDelayUntilScriptLoaded(function() {
+    var ctx = SP.Context.gt_current();
+    //Do something
+}, 'sp.js');
+</pre>
+<p></p>
+<p>Увы, эта функция теряет <strong>this</strong>.</p>
+<h3>Загрузка по требованию</h3>
+<p>Если вам необходимо загрузить скрипт по требованию, то для этого есть целых два метода:</p>
+<ul>
+<li>
+<h5>SP.SOD.execute(fileName: string, functionName: string, args?: any[]): void; </h5>
+<li>
+<h5>SP.SOD.executeFunc(fileName: string, typeName: string, fn: () =&gt; void ): void;</h5></li></ul>
+<p>Пример вызовов (результат одинаковый):</p><pre class="brush: js;">SP.SOD.executeFunc('mQuery.js', 'm$', function() {
+     m$.ready(function (){ });
+}
+
+SP.SOD.execute('mQuery.js', 'm$.ready', [function (){ }] );
+
+
+<font face="Trebuchet MS">Есть еще один метод, который загружает сразу несколько скриптов:</font></pre>
+<h5>SP.SOD.loadMultiple(keys: string[], fn: () =&gt; void): void;</h5>
+<p>В отличие от предыдущих методов не проверяет наличие объекта\типа\функции. Но необходимость в этом методе небольшая, так как есть зависимости между скриптами.</p>
+<h3>Зависимости между скриптами</h3>
+<p>Чтобы сделать зависимость между скриптами надо вызвать метод:</p>
+<h5>SP.SOD.registerSodDep(fileName: string, dependentFileName: string): void;</h5>
+<p>В дальнейшем, если вызвать загрузка скрипта с именем <em>fileName</em>, то перед ним будет загружен скрипт с именем <em>dependentFileName</em>. Эта функция идемпотентна, как и <em>SP.SOD.registerSod</em>.</p>
+<h3>Использование SOD в своих скриптах</h3>
+<p>Чтобы загружать свой скриптовый файл с помощью <strong>SOD</strong>, надо в конце скрипта вызывать метод</p>
+<h5>SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs(scriptFileName: string): void;</h5>
+<p>Так как SOD неинтрузивная библиотека, то хорошим тоном будет писать так:</p><pre class="brush: js;">if ( SP &amp;&amp; SP.SOD ) {
+    SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("script.js");
+}
+</pre>
+<p>Если вы используете внешние скрипты и хотите их подключить к SOD, то потребуется написать хелпер (typescript):</p><pre class="brush: js;">function loadExternalScript(key: string, scriptPath: string) {
+    var scriptNode = document.createElement('script');
+    scriptNode.type = 'text/javascript';
+    scriptNode.src = scriptPath;
+
+    var headNode = document.getElementsByTagName('head');
+    if (headNode[0] != null)
+        headNode[0].appendChild(scriptNode);
+
+    var callback = (e: Event) =&gt; {
+        SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs(key);
+    };
+    scriptNode.onreadystatechange = callback;
+    scriptNode.onload = callback;
+}
+</pre>
+<h3>SOD и MDS</h3>
+<p>SharePoint 2013 принес еще одно новшество- Minimal Download Strategy. Эта стратегия заставляет браузер перезагружать не всю страницу, а частями. Такая загрузка снижает трафик, но плохо влияет на скрипты. Потому что теперь страница может быть обновлена без перезагрузки скриптов.</p>
+<p>Для того, чтобы функция была вызвана после ajax перезагрузки страницы (без перезагрузки скриптов), надо зарегистрировать её с помощью</p>
+<h5>function RegisterModuleInit(scriptFileName: string, initFunc: () =&gt; void ): void;</h5>
+<p>Первый параметр – url скрипта, указанный в SOD, второй – функция, которую надо вызывать при ajax перезагрузке.</p>
+<p>Ковыряя исходники скриптов SharePoint, я нашел интересную вещь. Функция <em>SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs </em>сама вызывает <em>RegisterModuleInit</em>. В качестве initFunc передается функция с именем <em>$_global_!scriptName!.</em> <em>!scriptName!</em> формируется путем отрезания расширения (после последней точки) и заменой всех точек на символы подчеркивания. Но это работает только для скриптов в <em>_layouts/15</em>.</p>
+<h3>Publish\Subscribe</h3>
+<p>В модульных приложениях на JavaScript часто используется механизм подписок и оповещений для взаимодействия между компонентами приложения. В SOD используется такой механизм и он выставлен наружу, так что можно его использовать в своем приложении.</p>
+<p>Publish\Subscribe состоит из трех методов:</p>
+<ul>
+<li><strong><font size="2">SP.SOD.notifyEventAndExecuteWaitingJobs(eventName: string, args?: any[]): void;</font></strong><br>Этот метод вызывает события с указанными параметрами. 
+<li><font size="2"><strong>SP.SOD.executeOrDelayUntilEventNotified(func: Function, eventName: string): bool;<br></strong></font>Эта функция создает подписку на событие с параметрами и вызывается если событие уже наступило. 
+<li><strong><font size="2">SP.SOD.delayUntilEventNotified(func: Function, eventName: string): void;</font></strong><br>Эта функция только создает подписку.</li></ul>
+<h3>Заключение</h3>
+<p>Обязательно используйте SOD в своих проектах. Это позволит делать модульные скрипты и корректно взаимодействовать со скриптами SharePoint.</p>  

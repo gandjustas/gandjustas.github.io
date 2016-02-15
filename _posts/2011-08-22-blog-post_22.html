@@ -1,0 +1,298 @@
+---
+layout: post
+title: "Решение задач. Соединенные веб-части, продолжение."
+date: '2011-08-22T10:00:00.002+04:00'
+author: "Станислав Выщепан"
+tags:
+- ASP.NET
+- web parts
+- SharePoint
+modified_time: '2011-08-22T13:46:52.969+04:00'
+thumbnail: http://lh5.ggpht.com/-JM-t7GPAvZg/TlFzM9NkRTI/AAAAAAAAAE4/94cQnLHYTXo/s72-c/image_thumb%25255B1%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-8063431029953438640
+blogger_orig_url: http://blog.gandjustas.ru/2011/08/blog-post_22.html
+---
+
+<p><a href="http://gandjustas.blogspot.com/2011/08/blog-post.html" target="_blank">В прошлый</a> раз я рассказывал как сделать простые соединенные веб-части. Сегодня буду рассказывать как улучшить решение и сделать его более полезным в реальной жизни.</p><h4>План действий</h4><ol><li>Фильтрация в SPGridView </li>
+<li>Оптимизация передачи данных между веб-частями </li>
+<li>Добавление параметров для веб-частей </li>
+<li>Асинхронная загрузка дерева </li>
+<li>Bin deployment </li>
+</ol><a name='more'></a>  <br />
+<cut title="Читать дальше..."><br />
+<h4>Фильтрация в SPGridView</h4><p>Разрабатывая UI на SharePoint мы имеем всю мощь библиотеки контролов ASP.NET, об этом не стоит забывать. Вместо того чтобы реализовывать функционал который уже есть лучше потратить время на изучение существующих возможностей.</p><p>Например можно перехватывать события SPGridView для обработки фильтрации, а можно использовать существующий инструментарий контролов Data Source для этих целей.</p><p>Подробно описано <a href="http://www.reversealchemy.net/blog/2009/05/01/building-a-spgridview-control-part-1-introducing-the-spgridview/" target="_blank">в статье</a>, здесь приведу вкратце код для достижения цели.</p><p>Создание дочерних элементов веб-части:</p><pre class="brush: csharp;">this.ds = new ObjectDataSource(typeof(GridTableConsumer).AssemblyQualifiedName, &quot;SelectData&quot;)
+    {
+        ID = &quot;gridDS&quot;,
+        EnableCaching = false
+    };
+this.ds.ObjectCreating += (sender, e) =&gt; e.ObjectInstance = this;
+this.Controls.Add(this.ds);
+
+this.grid = new SPGridView
+    {
+        ID = &quot;grid&quot;,
+        AutoGenerateColumns = false,
+        DataSourceID = this.ds.ID,
+        AllowFiltering = true,
+        FilteredDataSourcePropertyName = &quot;FilterExpression&quot;,
+        FilteredDataSourcePropertyFormat = &quot;{1} = '{0}'&quot;,
+    };
+this.Controls.Add(this.grid);</pre><p>Для тех кто не знаком с классом <a href="http://msdn.microsoft.com/en-us/library/system.web.ui.webcontrols.objectdatasource.aspx" target="_blank">ObjectDataSource</a> рекомендую изучить его возможности. Для создания веб-частей очень хорошо подходит.</p><p>В данном коде применяется хитрость, чтобы контрол ObjectDataSource не создавал экземпляр класса, в данном случае веб-части, в обработчике события ObjectCreating подсовывается текущий экземпляр.</p><p>Далее метод SelectData</p><p>&#160;</p><p>Чтобы работали фильтры SPGridView лучше всего возвращать объект DataTable.</p><pre class="brush: csharp;">IWebPartTable provider;
+PropertyDescriptorCollection schema;
+ICollection data;
+
+public DataTable SelectData()
+{
+    EnsureDataAndSchema();
+
+    DataTable result = null;
+    if (this.data != null &amp;&amp; this.schema != null)
+    {
+        result = this.data.ToDataTable(this.schema);
+    }
+    return result;
+}
+
+private void EnsureDataAndSchema()
+{
+    if (this.data == null)
+    {
+        this.provider.GetTableData((d, s) =&gt; 
+        {
+            this.data = d;
+            this.schema = s;
+        });
+    }
+}</pre><p>В данном случае используется простые extension-метод GetTableData и ToDataTable. Их код можно посмотреть в исходниках.</p><p>Так как автоматически колонки для SPGridView не создаются, то необходимо это делать в коде, причем на наиболее позднем этапе жизненного цикла.</p><pre class="brush: csharp;">protected override void OnPreRender(EventArgs e)
+{
+    base.OnPreRender(e);
+
+    EnsureDataAndSchema();
+    GenerateGridColumns(this.grid, this.schema);
+    this.grid.DataBind();
+}
+
+private static void GenerateGridColumns(SPGridView grid, PropertyDescriptorCollection properties)
+{
+    grid.Columns.Clear();
+    if (properties != null)
+    {
+        var fields = properties.OfType&lt;PropertyDescriptor&gt;()
+                               .Select(p =&gt; new SPBoundField
+                               {
+                                   DataField = p.Name,
+                                   HeaderText = p.DisplayName,
+                                   SortExpression = p.Name
+                               })
+                               .ToList();
+        fields.ForEach(grid.Columns.Add);
+        grid.FilterDataFields = string.Join(&quot;,&quot;, fields.Select(f =&gt; f.DataField).ToArray());
+    }
+}</pre><p>Последняя строка в GenerateGridColumns необходима чтобы указать по каким колонкам можно фильтровать.</p><p>Ну собственно этого достаточно чтобы работала фильтрация в SPGridView. Все это выглядит как стандартное представление для списка.</p><p><a href="http://lh6.ggpht.com/-UAwSWxNfLV8/TlFzMC0gsoI/AAAAAAAAAE0/FfA9nK9cvfU/s1600-h/image%25255B3%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh5.ggpht.com/-JM-t7GPAvZg/TlFzM9NkRTI/AAAAAAAAAE4/94cQnLHYTXo/image_thumb%25255B1%25255D.png?imgmax=800" width="517" height="649" /></a></p><h4>Оптимизация</h4><p>Теперь получается что веб-часть дерева организаций создает из профилей DataTable, передает его веб-части представления в виде таблицы и там еще раз создается DataTable. Можно оптимизировать и создавать таблицу один раз.</p><p>Мы можем передавать с помощью интерфейса IWebPartTable сам список сотрудников в выбранном подразделении, а в Schema передавать PropertyDescriptorCollection, которые позволят вытаскивать данные из профилей пользователей.</p><p>Для класса UserProfile таких дескрипторов нет, но никто не мешает их написать</p><pre class="brush: csharp; collapse: true;">public class UserProfilePropertyDescriptor: PropertyDescriptor
+{
+    public UserProfilePropertyDescriptor(ProfileSubtypeProperty propery)
+        :base(propery.Name, new Attribute[] { new DisplayNameAttribute(propery.DisplayName)})
+    {
+    }
+
+    public override bool CanResetValue(object component)
+    {
+        return false;
+    }
+
+    public override Type ComponentType
+    {
+        get { return typeof(UserProfile); }
+    }
+
+    public override object GetValue(object component)
+    {
+        return Convert.ToString((component as UserProfile)[this.Name].Value);
+    }
+
+    public override bool IsReadOnly
+    {
+        get { return false; }
+    }
+
+    public override Type PropertyType
+    {
+        get { return typeof(string); }
+    }
+
+    public override void ResetValue(object component)
+    {
+        throw new NotImplementedException();
+    }
+
+    public override void SetValue(object component, object value)
+    {
+        (component as UserProfile)[this.Name].Value = value;
+    }
+
+    public override bool ShouldSerializeValue(object component)
+    {
+        return false;
+    }
+}</pre><p>Теперь нужно выкинуть код формирования таблицы, заменив его гораздо более простым</p><pre class="brush: csharp; collapse: true;">public void GetTableData(TableCallback callback)
+{
+    if (callback != null)
+    {
+        EnsureChildControls();
+        if (this.tree.SelectedNode != null)
+        {
+            long recordId = 0;
+
+            if (long.TryParse(this.tree.SelectedValue, out recordId))
+            {
+                var profiles = this.OrganizationProfileManager
+                                   .GetOrganizationProfile(recordId)
+                                   .GetImmediateMembers();
+                callback(profiles);
+            }
+        }
+    }
+}</pre><p>И в качестве Schema возвращать набор свойств профиля</p><pre class="brush: csharp; collapse: true;">public PropertyDescriptorCollection Schema
+{
+    get
+    {
+        if (this.schema == null)
+        {
+            var upm = new UserProfileManager(SPServiceContext.Current);
+            //Filter section headers from property list
+            var props = from prop in upm.DefaultProfileSubtypeProperties
+                        where !prop.IsSection
+                        orderby prop.DisplayOrder
+                        select new UserProfilePropertyDescriptor(prop);
+            this.schema = new PropertyDescriptorCollection(props.ToArray());
+        }
+        return this.schema;
+    }
+}</pre><h4>Параметры веб-частей</h4><p>Веб-часть дерева организаций все время возвращает все свойства профиля, в реальном случае такой сценарий бесполезен. Надо научить веб-часть возвращать только нужные свойства.</p><p>Для этого надо создать параметр, который будет хранить список свойств. </p><pre class="brush: csharp;">[WebBrowsable(false)]
+[Personalizable(PersonalizationScope.Shared)]
+public string ProfileProperties { get; set; }
+
+public HashSet&lt;string&gt; ProfilePropertyNames
+{
+    get
+    {
+        return new HashSet&lt;string&gt;((ProfileProperties ?? &quot;&quot;).Split(new[] { PropertyNamesDelimeter }, StringSplitOptions.None));
+    }
+    set
+    {
+        ProfileProperties = string.Join(PropertyNamesDelimeter, value.ToArray());
+    }
+}</pre><p>Атрибут WebBrowsable с параметром false говорит что не надо генерировать интерфейс для ввода параметра, а Personalizable говорит что значение этого свойствах надо хранить в свойствах веб-части.</p><p>Чтобы редактировать параметр нужен Custom Tool Part, сделать его довольно легко. Надо переопределить всего два метода, один для создания дочерних контролов, как у обычной веб-части, а второй для сохранения настроек.</p><pre class="brush: csharp; collapse: true;">public class OrganizationTreeToolPart : ToolPart
+{
+    ListBox list;
+    public OrganizationTreeToolPart()
+    {
+        this.Title = &quot;Profile properties&quot;;
+    }
+
+    protected OrganizationTree WebPart
+    {
+        get
+        {
+            return this.ParentToolPane.SelectedWebPart as OrganizationTree;
+        }
+    }
+
+    protected override void CreateChildControls()
+    {
+        this.list = new ListBox()
+        {
+            SelectionMode = ListSelectionMode.Multiple,
+            Height = Unit.Pixel(200)
+        };
+        var names = this.WebPart.ProfilePropertyNames;
+        var upm = new UserProfileManager(SPServiceContext.Current);
+        var items = from p in upm.DefaultProfileSubtypeProperties
+                    where !p.IsSection
+                    orderby p.DisplayOrder
+                    select new ListItem(
+                        string.Format(&quot;{0} ({1})&quot;, p.DisplayName, p.Name),
+                        p.Name)
+                        {
+                            Selected = names.Contains(p.Name)
+                        };
+        this.list.Items.AddRange(items.ToArray());
+        this.Controls.Add(this.list);
+    }
+
+    public override void ApplyChanges()
+    {
+        var set = new HashSet&lt;string&gt;(this.list
+                    .GetSelectedIndices()
+                    .Select(i =&gt; this.list.Items[i].Value));
+        this.WebPart.ProfilePropertyNames = set;
+    }
+}</pre><p>В этом Tool Part создается список с возможностью множественного выбора, который заполняется свойствами профилей пользователей.</p><p>Чтобы отображать этот Custom Tool Part необходимо веб-часть унаследовать от Microsoft.SharePoint.WebParts.WebPart и переопределить метод GetToolParts</p><pre class="brush: csharp;">public override ToolPart[] GetToolParts()
+{
+    var tps = base.GetToolParts().ToList();
+    tps.Add(new OrganizationTreeToolPart());
+    return tps.ToArray();
+}</pre><p>Далее чтобы использовать это свойство достаточно слегка изменить возвращаемую схему</p><pre class="brush: csharp;">public PropertyDescriptorCollection Schema
+{
+    get
+    {
+        if (this.schema == null)
+        {
+            var names = this.ProfilePropertyNames; //(1)
+            var upm = new UserProfileManager(SPServiceContext.Current);
+            //Filter section headers from property list
+            var props = from prop in upm.DefaultProfileSubtypeProperties
+                        where !prop.IsSection
+                        where names.Contains(prop.Name) //(2)
+                        orderby prop.DisplayOrder
+                        select new UserProfilePropertyDescriptor(prop);
+            this.schema = new PropertyDescriptorCollection(props.ToArray());
+        }
+        return this.schema;
+    }
+}</pre><p>Изменения выделены комментариями.</p><p>Теперь пользователь сможет самостоятельно выбирать какие свойства профиля отправлять веб-части получателю.</p><p><a href="http://lh4.ggpht.com/-2ZYNwIgb1wI/TlFzNLdWGxI/AAAAAAAAAE8/oXEeayaZI_c/s1600-h/image%25255B7%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh3.ggpht.com/-9deC-xrBGUc/TlFzNnbDDLI/AAAAAAAAAFA/1aIu9wd9qss/image_thumb%25255B3%25255D.png?imgmax=800" width="452" height="312" /></a></p><h4>Асинхронная загрузка дерева организаций по требованию</h4><p>В первоначальном варианте дерево строилось при загрузке веб-части, но необходимости в этом нет. Достаточно построить дерево, из части узлов, а остальное загружать по требованию.</p><p>И снова нам на помощь приходит ASP.NET. Стандартный контрол TreeView умеет загружать узлы по требованию с помощь AJAX. Нам для этого надо сделать совсем мало:</p><ol><li>Установить свойство <a href="http://msdn.microsoft.com/en-us/library/system.web.ui.webcontrols.treeview.populatenodesfromclient.aspx" target="_blank">TreeView.PopulateNodesFromClient</a> = true </li>
+<li>Указывать <a href="http://msdn.microsoft.com/en-us/library/system.web.ui.webcontrols.treenode.populateondemand.aspx" target="_blank">TreeNode .PopulateOnDemand</a> = true, если требуется загрузка узлов по требованию </li>
+<li>Обрабатывать событие <a href="http://msdn.microsoft.com/en-us/library/system.web.ui.webcontrols.treeview.treenodepopulate.aspx" target="_blank">TreeView.TreeNodePopulate</a>, в обработчике которого и заниматься загрузкой узлов. </li>
+</ol><p>Код для загрузки по требованию</p><pre class="brush: csharp; collapse: true;">protected override void CreateChildControls()
+{
+    this.tree = new TreeView();
+    this.tree.EnableClientScript = true;
+    this.tree.PopulateNodesFromClient = true;
+    this.tree.TreeNodePopulate += new TreeNodeEventHandler(tree_TreeNodePopulate);
+    this.tree.Nodes.Add(ToTreeNode(this.OrganizationProfileManager.RootOrganization));
+    Controls.Add(this.tree);
+}
+
+
+void tree_TreeNodePopulate(object sender, TreeNodeEventArgs e)
+{
+    var recordId = int.Parse(e.Node.Value);
+    var profile = this.OrganizationProfileManager.GetOrganizationProfile(recordId);
+    foreach (var child in profile.GetChildren())
+    {
+        e.Node.ChildNodes.Add(ToTreeNode(child));
+    }
+
+}
+
+private static TreeNode ToTreeNode(OrganizationProfile child)
+{
+    return new TreeNode(child.DisplayName, child.RecordId.ToString())
+           {
+               PopulateOnDemand = child.HasChildren,
+           };
+}</pre><h4>Bin deployment </h4><p>Сборки решений уровня фермы в SharePoint можно развертывать как в GAC, так и в каталог Bin веб-приложений SharePoint. Второй вариант подходит только для веб-частей, но в данном случае больше и не нужно.</p><p>Чтобы развернуть сборку в Bin надо поменять одну настройку в свойствах проекта</p><p><a href="http://lh6.ggpht.com/-MAQOOyVT7Vo/TlFzOB6EIUI/AAAAAAAAAFE/NcWLzl5NOiA/s1600-h/image%25255B11%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image" border="0" alt="image" src="http://lh4.ggpht.com/-3QqPXU1WZq0/TlFzO5GT6LI/AAAAAAAAAFI/LyaFE2HlYcw/image_thumb%25255B5%25255D.png?imgmax=800" width="410" height="405" /></a></p><p>Но после этого решение откажется работать. Для сборок, развертываемых в Bin, необходимо вручную прописывать требуемый уровень разрешений для работы. Это можно сделать руками, но можно воспользоваться расширением <a href="http://spsf.codeplex.com/" target="_blank">SPSF</a>.</p><p>В результате в solution manifest (package) должен появиться раздел</p><pre class="brush: xml;">&lt;CodeAccessSecurity&gt;
+  &lt;PolicyItem&gt;
+    &lt;PermissionSet class=&quot;NamedPermissionSet&quot; version=&quot;1&quot;&gt;
+      &lt;IPermission class=&quot;Microsoft.SharePoint.Security.SharePointPermission, Microsoft.SharePoint.Security, Version=14.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c&quot; version=&quot;1&quot; ObjectModel=&quot;True&quot; /&gt;
+      &lt;IPermission class=&quot;SecurityPermission&quot; version=&quot;1&quot; Flags=&quot;Execution&quot; /&gt;
+      &lt;IPermission class=&quot;AspNetHostingPermission&quot; version=&quot;1&quot; Level=&quot;Minimal&quot; /&gt;
+    &lt;/PermissionSet&gt;
+    &lt;Assemblies&gt;
+      &lt;Assembly
+        Name=&quot;$SharePoint.Project.AssemblyName$&quot;
+        Version=&quot;$SharePoint.Project.AssemblyVersion$&quot;
+        PublicKeyBlob=&quot;$SharePoint.Project.AssemblyPublicKeyBlob$&quot; /&gt;
+    &lt;/Assemblies&gt;
+  &lt;/PolicyItem&gt;
+&lt;/CodeAccessSecurity&gt;</pre><p>Кстати SPSF генерирует переносы строк, но с ними не работает.</p><h4>Заключение</h4><p>Если вы дочитали до этого момента и ничего не поняли, то рекомендую более внимательно изучать ASP.NET Controls и .NET FW в частности компонентную модель, вопросы работы с данными и безопасностью, а также внимательно изучить ссылки, которые я привел в <a href="http://gandjustas.blogspot.com/2011/08/blog-post.html" target="_blank">первом посте</a>.</p><p>Исходный код можно найти на CodePlex:&#160; <a href="http://spsamples.codeplex.com/">http://spsamples.codeplex.com/</a></p></cut><br />

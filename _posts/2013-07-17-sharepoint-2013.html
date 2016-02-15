@@ -1,0 +1,79 @@
+---
+layout: post
+title: "Автокомплит в SharePoint 2013: пошаговое руководство"
+date: '2013-07-17T10:00:00.001+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint 2013
+- autocomplete
+- js
+- SPClientAutoFill
+- typescript
+- SharePoint
+modified_time: '2013-07-17T10:00:03.746+04:00'
+thumbnail: http://lh3.ggpht.com/--qw8nUnTbGk/UeHWQkSLb5I/AAAAAAAAAVQ/krcU8C8NrMw/s72-c/070713_0434_LeveragingS1%25255B1%25255D_thumb%25255B4%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-3132948250596238604
+blogger_orig_url: http://blog.gandjustas.ru/2013/07/sharepoint-2013.html
+---
+
+<blockquote> <p>Данный функционал был найден <a href="http://twitter.com/avishnyakov" target="_blank">Антоном Вишняковым</a> и описан в <a href="http://spdevlab.com/2013/07/07/leveraging-spclientautofill-control-in-sharepoint-2013-build-your-own-auto-complete-experience/" target="_blank">посте в его блоге</a>. Большая часть контента данного поста взята из его блога с его разрешения.</p></blockquote> <p>Вы уже видели новый элемент управления для выбора людей в SharePoint 2013? Этот элемент управления был сильно улучшен по сравнению с предыдущей версией SharePoint. Теперь этот элемент можно использовать в клиентском коде и спокойно внедрять на своих страницах. Кроме того появился отличный функционал автозаполнения. </p> <p><a href="http://lh3.ggpht.com/-awCQkiAOm8Q/UeHWP0wSooI/AAAAAAAAAVI/zeCR16zQ-yI/s1600-h/070713_0434_LeveragingS1%25255B1%25255D%25255B6%25255D.png"><img title="070713_0434_LeveragingS1[1]" style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; display: inline; border-top-width: 0px" border="0" alt="070713_0434_LeveragingS1[1]" src="http://lh3.ggpht.com/--qw8nUnTbGk/UeHWQkSLb5I/AAAAAAAAAVQ/krcU8C8NrMw/070713_0434_LeveragingS1%25255B1%25255D_thumb%25255B4%25255D.png?imgmax=800" width="554" height="269"></a> </p> <p>Замечательная новость: вы можете использовать функционал автозаполнения с любым текстовым полем. Эту функцию реализует контрол&nbsp; SPClientAutoFill. Он находится в файле <em>autofill.js</em> в <em>_layouts/15</em>. Давайте посмотрим как сделать решение с его помощью.</p> <h3>Шаг первый: разметка и стили</h3> <p>Для того чтобы использовать SPClientAutoFill вам потребуется следующая разметка:</p><pre class="brush: xml; ruler: true;">&lt;div style='position: relative;'&gt;
+    &lt;input type='text' id='autofillElement' /&gt;
+    &lt;div class='sp-peoplepicker-autoFillContainer' 
+            id='autofillContainer' /&gt;
+&lt;/div&gt;
+
+</pre>
+<p>Обязательно position:relative для внешнего элемента, иначе будут проблемы с позиционированием подсказок.</p>
+<h3>Второй шаг: подключение библиотеки</h3>
+<p>По-умолчанию autofill.js не зарегистрирован как Script On Demand. Зарегистрировать скрипт можно тремя способами:</p>
+<ul>
+<li>Вызовом функции <em>SP.SOD.registerSod</em> в JavaScript 
+<li>Серверным контролом &lt;SharePoint:ScriptLink /&gt; на странице 
+<li>В свойстве JSLink</li></ul>
+<p><strong>Внимание</strong>. Не рекомендуется добавление непосредственно тега script в разметку в SharePoint.</p>
+<p>Далее необходимо загрузить autofill.js с помощью Script On Demand.</p><pre class="brush: js;">SP.SOD.executeFunc('autofill.js', 'SPClientAutoFill',
+   function() {
+       //Do work here
+   });
+</pre>
+<h3>Шаг третий: логика autocomplete</h3><pre class="brush: js;">//Создание контрола
+var autofill = new SPClientAutoFill('autofillElement', 
+                                    'autofillContainer',
+                                    OnPopulate);
+
+
+</pre>
+<p>Функция OnPopulate принимает параметр – элемент input, к которому привязан контрол.</p>
+<p>Внутри функции необходимо сформировать массив объектов, описывающих элементы подсказки, и вызвать <em>SPClientAutoFill.prototype.PopulateAutoFill</em>.</p>
+<p>Элементы могут иметь один из 4 типов:</p>
+<ul>
+<li><em>SPClientAutoFill.MenuOptionType.Option</em> – элемент выбора, для него необходимо указывать ключ и отображаемый текст. 
+<li><em>SPClientAutoFill.MenuOptionType.Separator</em> – Разделитель групп. 
+<li><em>SPClientAutoFill.MenuOptionType.Footer</em> – Футер, содержащий текст. 
+<li><em>SPClientAutoFill.MenuOptionType.Loading</em> – Индикатор загрузки, нужен в случае загрузки элементов с сервера.</li></ul><pre class="brush: js;">function OnPopulate(el) {
+    var result = [];
+    var item = {}
+ 
+    item[SPClientAutoFill.KeyProperty] = 'key';
+    item[SPClientAutoFill.DisplayTextProperty] = 'Title';
+    item[SPClientAutoFill.MenuOptionTypeProperty] = SPClientAutoFill.MenuOptionType.Option;
+    result.push(item);
+
+    item = {};
+    item[SPClientAutoFill.DisplayTextProperty] = 'Footer';
+    item[SPClientAutoFill.MenuOptionTypeProperty] = SPClientAutoFill.MenuOptionType.Footer;
+    result.push(item);
+
+    SPClientAutoFill.GetAutoFillObjFromInput(el).PopulateAutoFill(result, OnSelect);
+}
+<font face="Trebuchet MS"></font></pre>
+<h3>Шаг четвертый:&nbsp; логика выбора элемента</h3>
+<p>Функция OnSelect из предыдущего блока кода принимает два параметра – id элемента input и выбранный элемент autocomplete.</p>
+<p>Так как выбрать можно только элементы типа <em>SPClientAutoFill.MenuOptionType.Option</em>, то у вас обязательно есть ключ и отображаемый текст выбранного элемента.</p><pre class="brush: js;">function OnSelect(targetInputId, item) {
+    var targetElement = document.getElementById(targetInputId);
+    targetElement.value = item[SPClientAutoFill.DisplayTextProperty];
+}
+</pre>
+<h3>Шаг пятый: изучение API и TypeScript</h3>
+<p>Полное описание класса SPClientAutoFill для TypeScript есть в проекте <a href="https://sptypescript.codeplex.com/" target="_blank">SPTypeScript</a> и доступно по ссылке: <a title="https://sptypescript.codeplex.com/SourceControl/latest#Definitions/autofill.d.ts" href="https://sptypescript.codeplex.com/SourceControl/latest#Definitions/autofill.d.ts" target="_blank">https://sptypescript.codeplex.com/SourceControl/latest#Definitions/autofill.d.ts</a></p>
+<p>Кроме того в проекте SPTypeScript есть примеры использования SPClientAutoFill и кастомизации поля на форме элемента списка с помощью этого класса.</p>  

@@ -1,0 +1,150 @@
+---
+layout: post
+title: "Улучшаем экспорт в Excel для SharePoint"
+date: '2014-01-15T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- ASP.NET
+- openxml
+- "программирование"
+- C#
+- closedxml
+- SharePoint
+modified_time: '2014-01-15T10:00:06.518+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-3123988446655064754
+blogger_orig_url: http://blog.gandjustas.ru/2014/01/sharepoint-export-to-excel.html
+---
+
+<p>Стандартная возможность экспорта в Excel в SharePoint работает довольно необычным образом. При нажатии на кнопку экспорта SharePoint отдает файл запроса в специальном формате, который открывается Excel и&nbsp; уже сам Excel затягивает данные.</p> <p>Преимущество такого подхода в том, что данные в Excel можно обновить, так как есть соединение. Но недостатков больше:</p> <ol> <li>Нужен установленный Excel на компьютер, чтобы получить данные.  <li>В полученном документе для названий колонок используется InternalName полей.  <li>В полученном документе используется “сырой” формат данных, что далеко не всегда подходит.</li></ol> <p>С помощью небольшого объема кода можно подменить стандартную функцию экспорта на свою так, что пользователи ничего не заметят.</p> <h3>Подмена кнопок экспорта</h3> <p>Чтобы заменить существующий элемент в Ribbon надо добавить новый <font size="2" face="Courier New">CommandUIDefinition</font> с параметром <font size="2" face="Courier New">Location</font> равным <font size="2" face="Courier New">Id</font> существующего элемента. Все стандартные элементы находятся в файле <font face="Courier New">C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\<strong>14</strong>\TEMPLATE\GLOBAL\XML\CMDUI.XML</font> для SharePoint 2010 (или <strong>15 </strong>для SharePoint 2013).</p> <p>Для того, чтобы подменить кнопки экспорта в Excel надо найти кнопки с <font size="2" face="Courier New">Id</font> равными<font size="2">&nbsp;<font face="Courier New">Ribbon.List.Actions.ExportToSpreadsheet</font> и <font face="Courier New">Ribbon.Library.Actions.ExportToSpreadsheet</font></font> и полностью скопировать в свой проект. В качестве <font size="2" face="Courier New">Location</font> для новых элементов надо указать эти <font size="2" face="Courier New">Id</font>.</p><pre class="brush: xml;">&lt;CommandUIDefinitions&gt;
+  &lt;CommandUIDefinition
+    Location="Ribbon.Library.Actions.ExportToSpreadsheet"&gt;
+    &lt;Button Id="Ribbon.Library.Actions.ExportToSpreadsheet-Replacement"
+      Sequence="40"
+      Command="ExportToSpreadsheet-Replacement"
+      Image16by16="/_layouts/$Resources:core,Language;/images/formatmap16x16.png" Image16by16Top="-152" Image16by16Left="-32"
+      Image32by32="/_layouts/$Resources:core,Language;/images/formatmap32x32.png" Image32by32Top="-352" Image32by32Left="0"
+      LabelText="$Resources:core,cui_ButExportToSpreadsheet;"
+      ToolTipTitle="$Resources:core,cui_ButExportToSpreadsheet;"
+      ToolTipDescription="$Resources:core,cui_STT_ButExportListToSpreadsheet;"
+      TemplateAlias="o2"
+        /&gt;
+  &lt;/CommandUIDefinition&gt;
+  &lt;CommandUIDefinition
+    Location="Ribbon.List.Actions.ExportToSpreadsheet"&gt;
+    &lt;Button Id="Ribbon.List.Actions.ExportToSpreadsheet-Replacement"
+      Sequence="40"
+      Command="ExportToSpreadsheet-Replacement"
+      Image16by16="/_layouts/$Resources:core,Language;/images/formatmap16x16.png" Image16by16Top="-152" Image16by16Left="-32"
+      Image32by32="/_layouts/$Resources:core,Language;/images/formatmap32x32.png" Image32by32Top="-352" Image32by32Left="0"
+      LabelText="$Resources:core,cui_ButExportToSpreadsheet;"
+      ToolTipTitle="$Resources:core,cui_ButExportToSpreadsheet;"
+      ToolTipDescription="$Resources:core,cui_STT_ButExportListToSpreadsheet;"
+      TemplateAlias="o1"
+        /&gt;
+  &lt;/CommandUIDefinition&gt;
+&lt;/CommandUIDefinitions&gt;
+</pre>
+<p>Есть еще отдельная кнопка для календаря с <font size="2" face="Courier New">Id="Ribbon.Calendar.Calendar.Actions.ExportToSpreadsheet"</font>, с ней можно сделать тоже самое.</p>
+<h3>Создание контрола</h3>
+<p>Кнопка должна вызывать некоторый серверный код. Чтобы поведение было аналогично стандартной кнопке лучше всего сделать <em>DelegateControl</em>, который будет размещаться на каждой странице. Для этого есть контейнер с <font face="Courier New">Id="AdditionalPageHead"</font></p><pre class="brush: xml;">&lt;Control 
+  Id="AdditionalPageHead"
+  Sequence="1000"
+  ControlAssembly="$SharePoint.Project.AssemblyFullName$" 
+  ControlClass="$SharePoint.Type.7fd7c6f0-4eda-48ce-ac8f-aa9f9d2666ac.FullName$"/&gt;</pre>
+<p>Кастомная кнопка будет вызывать <em>PostBack</em>, обрабатываемый нашим контролом. Кнопка может быть нажата на странице представления списка, тогда не надо передавать дополнительных параметров на сервер. Представления списков могут быть добавлены на обычные страницы как веб-части, тогда нужно передать Id списка и представления на сервер.</p>
+<p>Увы, получение Id представления, в котором была нажата кнопка – нетривиальная задача. Поэтому я ограничусь только передачей Id списка.</p><pre class="brush: xml;">&lt;CommandUIHandlers&gt;
+  &lt;CommandUIHandler
+    Command="ExportToSpreadsheet-Replacement"
+    CommandAction="javascript:(function(){var x=SP.ListOperation.Selection.getSelectedList(); if (x) {__doPostBack('ExportToSpreadsheet-Replacement', x);}})();" /&gt;
+&lt;/CommandUIHandlers&gt;</pre>
+<p>Далее на сервере нужно проверить нажата ли кнопка на странице представления списка или на обычной странице:</p><pre class="brush: csharp;">protected override void OnLoad(EventArgs e) { 
+    if (this.Page.Request["__EVENTTARGET"] == "ExportToSpreadsheet-Replacement") 
+    {
+        var spContext  = SPContext.Current;
+        SPList list;
+        SPView view;
+
+        if (spContext.ViewContext.View != null)
+        {
+            list = spContext.List;
+            view = spContext.ViewContext.View;
+        }
+        else
+        {
+            var listId = new Guid(this.Page.Request["__EVENTARGUMENT"]);
+            var web = spContext.Web;
+            list = web.Lists[listId];
+            view = list.DefaultView;
+        }
+
+        ExportData(list.Title + " - " + view.Title, GetDataTable(list, view));
+    } 
+}
+</pre>
+<p>&nbsp;</p>
+<p>Получение таблицы данных по представлению очень просто:</p><pre class="brush: csharp;">private static System.Data.DataTable GetDataTable(SPList list, SPView view)
+{
+    var query = new SPQuery(view);
+    SPListItemCollectionPosition position;
+    var flags = SPListGetDataTableOptions.UseBooleanDataType | SPListGetDataTableOptions.UseCalculatedDataType;
+    var result = list.GetDataTable(query, flags, out position);
+    while (position != null)
+    {
+        list.AppendDataTable(query, flags, result, out position);
+    }
+    return result;
+}</pre>
+<h3>Генерация Excel файла</h3>
+<p>Последним шагом требуется сформировать Excel файл и отдать его клиенту. Один из самых простых способов сгенерировать Excel – использовать библиотеку ClosedXml (<a title="http://closedxml.codeplex.com/" href="http://closedxml.codeplex.com/">http://closedxml.codeplex.com/</a>).</p><pre class="brush: csharp;">private void ExportData(string title, System.Data.DataTable table)
+{
+    var wb = new XLWorkbook();
+    var ws = wb.Worksheets.Add(title);
+    ws.Cell(1, 1).InsertTable(table);
+
+    var response = this.Page.Response;
+    response.Clear();
+
+    response.ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    var filename = title+".xlsx";
+    response.AddHeader("content-disposition", GetContentDisposition(filename));
+
+    // Flush the workbook to the Response.OutputStream
+    using (var memoryStream = new MemoryStream())
+    {
+        wb.SaveAs(memoryStream);
+        memoryStream.WriteTo(response.OutputStream);
+    }
+    response.End();
+}
+</pre>
+<p>&nbsp;</p>
+<p>Первые три строки метода собственно формируют Excel документ (спасибо ClosedXml), а все остальное – код для отдачи файла клиенту.</p>
+<p>Заголовок ответа <em>content-disposition </em>очень по-разному воспринимается разными браузерами, поэтому отдать файл с корректным русским именем требует некоторых танцев с бубном.</p>
+<p>Код для формирования корректного заголовка <em>content-disposition </em>я нашел на StackOverflow <a href="http://stackoverflow.com/questions/93551/how-to-encode-the-filename-parameter-of-content-disposition-header-in-http">http://stackoverflow.com/questions/93551/how-to-encode-the-filename-parameter-of-content-disposition-header-in-http</a><br></p><pre class="brush: csharp;">private string GetContentDisposition(string filename)
+{
+    var request = this.Page.Request;
+    string contentDisposition;
+    if (request.Browser.Browser == "IE" &amp;&amp; (request.Browser.Version == "7.0" || request.Browser.Version == "8.0"))
+        contentDisposition = "attachment; filename=" + Uri.EscapeDataString(filename);
+    else if (request.UserAgent != null &amp;&amp; request.UserAgent.ToLowerInvariant().Contains("android")) // android built-in download manager (all browsers on android)
+        contentDisposition = "attachment; filename=\"" + MakeAndroidSafeFileName(filename) + "\"";
+    else
+        contentDisposition = "attachment; filename=\"" + filename + "\"; filename*=UTF-8''" + Uri.EscapeDataString(filename);
+    return contentDisposition;
+}
+
+private static readonly Dictionary&lt;char, char&gt; AndroidAllowedChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._-+,@£$€!½§~'=()[]{}0123456789".ToDictionary(c =&gt; c);
+private string MakeAndroidSafeFileName(string fileName)
+{
+    char[] newFileName = fileName.ToCharArray();
+    for (int i = 0; i &lt; newFileName.Length; i++)
+    {
+        if (!AndroidAllowedChars.ContainsKey(newFileName[i]))
+            newFileName[i] = '_';
+    }
+    return new string(newFileName);
+}</pre>
+<h3>Заключение</h3>
+<p>Чтобы все заработало на Production надо добавить файлы ClosedXml.dll и DocumentFormat.OpenXml.dll в ваш пакет. Кнопки Ribbon и контрол поместить в одну фичу уровня Site или Web.</p>
+<p>Весь проект можно посмотреть по ссылке - <a title="ExportToExcel" href="https://spsamples.codeplex.com/SourceControl/latest#ExportToExcel/">https://spsamples.codeplex.com/SourceControl/latest#ExportToExcel/</a></p>
+<p>Готовый WSP файл тут - <a title="https://spsamples.codeplex.com/releases/view/117220" href="https://spsamples.codeplex.com/releases/view/117220">https://spsamples.codeplex.com/releases/view/117220</a></p>  

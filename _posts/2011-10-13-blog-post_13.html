@@ -1,0 +1,87 @@
+---
+layout: post
+title: "Решение задачи. Задача таймера, почти конец."
+date: '2011-10-13T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint
+modified_time: '2011-10-14T11:50:15.492+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-3437261107957191321
+blogger_orig_url: http://blog.gandjustas.ru/2011/10/blog-post_13.html
+---
+
+<p>Посты в этой серии:</p>  <ol>   <li><a href="http://gandjustas.blogspot.com/2011/08/sharepoint.html" target="_blank">Список задач для проверки навыков</a>. </li>    <li><a href="http://gandjustas.blogspot.com/2011/10/blog-post.html" target="_blank">Создание задачи таймера</a>. </li>    <li><a href="http://gandjustas.blogspot.com/2011/10/blog-post_11.html" target="_blank">Использование подходящих классов</a>. </li>    <li>Передача команд задаче таймера (<em>этот пост</em>). </li>    <li><a href="http://gandjustas.blogspot.com/2011/10/blog-post_14.html" target="_blank">Взаимодействие веб-фронтэнда с задачами таймера</a>. </li> </ol>  <p>Задачи таймера сами по себе очень важны для многих решений, но не менее важно взаимодействие задач таймера с другими частями решения.</p>  <p>Например, задача таймера, которая выполняет очистку папок, требует большого количества ресурсов для работы, фактически просмотр всех баз контента для того чтобы удалить папки. Даже если надо удалить ровно одну папку, то задача таймера все равно будет бегать по всей контентной базе данных. Такое поведение крайне расточительно.</p>  <p>Надо как-то ограничить задачу таймера чтобы она бегала только по тем сайтам где разрешит администратор.</p>  <p>Проще всего этого добиться создав фичу уровня Web, которая выставляет свойства узла при активации и модифицировать задачу таймера, чтобы она проверяла свойство.</p>  <p>Код Feature Receiver</p>  <pre class="brush: csharp;">public override void FeatureActivated(SPFeatureReceiverProperties properties)
+{
+    SetCleanupFlag(properties, true);
+}
+
+public override void FeatureDeactivating(SPFeatureReceiverProperties properties)
+{
+    SetCleanupFlag(properties, false);
+}
+
+private void SetCleanupFlag(SPFeatureReceiverProperties properties, bool flag)
+{
+    var web = properties.Feature.Parent as SPWeb;
+    web.Properties[Constants.FlagPropertyName] = flag.ToString();
+    web.Properties.Update();
+}</pre>
+
+<p>Изменения в Timer Job:</p>
+
+<pre class="brush: csharp;">private void ProcessWeb(SPWeb web)
+{
+    if (Convert.ToBoolean(web.Properties[Constants.FlagPropertyName]))
+    {
+        tju.ProcessLists(web.Lists, ProcessList, null);
+    }
+}</pre>
+
+<p>Вот теперь задача таймера будет обрабатывать только то что укажет администратор. Для своих задач передачи данных из контекста веб-приложения в&#160; timer job вы можете также использовать списки, лучше скрытые.</p>
+
+<p>Но если задача таймера запускается нечасто, а результат пользователю нужен в короткое время, то эти способы не подойдут.</p>
+
+<h5>WorkItems</h5>
+
+<p>Про механизм “очередей” в SharePoint я <a href="http://gandjustas.blogspot.com/2011/03/sharepoint.html" target="_blank">писал ранее</a>, но тогда не было подходящей задачи для иллюстрации.</p>
+
+<p>Используем простую идею: некоторое действие пользователя ставит в очередь задачу (<a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spworkitem.aspx" target="_blank">SPWorkItem</a>), а задача таймера (worker) анализирует очередь на наличие новых задач и обрабатывает их.</p>
+
+<p>Для создания worker необходимо создать класс наследник <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spworkitemjobdefinition.aspx">SPWorkItemJobDefinition</a>, в котором переопределить два метода <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spworkitemjobdefinition.workitemtype.aspx">WorkItemType</a> и <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spworkitemjobdefinition.processworkitem.aspx">ProcessWorkItem</a>. Документация на MSDN утверждает что вам необходимо переопределить один из методов <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spworkitemjobdefinition.processworkitems.aspx">ProcessWorkItems</a> (с буквой s в конце) – не верьте.</p>
+
+<p>При обработке work item есть много тонкостей, но я не буду их тут описывать, а просто использую уже знакомый класс <a href="http://msdn.microsoft.com/en-us/library/microsoft.office.server.utilities.timerjobutility.aspx">TimerJobUtility</a>, в котором уже сделана вся “грязная” работа.</p>
+
+<pre class="brush: csharp;">public class CleaupWorker : SPWorkItemJobDefinition
+{
+    TimerJobUtility tju;
+    WorkItemTimerJobState wiJobState = new WorkItemTimerJobState(true);
+
+    public CleaupWorker() : base() { }
+
+    public CleaupWorker(SPWebApplication webApp)
+        : base(Constants.WorkerJobName, webApp)
+    {
+        this.Title = &quot;Folder cleanup worker&quot;;
+    }
+
+    public override Guid WorkItemType()
+    {
+        return Constants.WorkItemType;
+    }
+
+    protected override bool ProcessWorkItem(SPContentDatabase contentDatabase, SPWorkItemCollection workItems, SPWorkItem workItem, SPJobState jobState)
+    {
+        tju = new TimerJobUtility(Constants.TimerJobName, jobState);
+        return tju.ProcessWorkItem(workItems, workItem, wiJobState, ProcessWorkItemCore);
+    }
+
+    private void ProcessWorkItemCore(SPWorkItem wi, WorkItemTimerJobState timerJobstate)
+    {
+        var list = timerJobstate.Web.Lists[wi.ParentId];
+        CleanupUtility.CleanupList(list);
+    }
+}</pre>
+
+<p>Тем, кто занимается разработкой для SharePoint Foundation повезло гораздо меньше, им придется все подводные камни обходить самостоятельно. Крайне рекомендую для этого посмотреть реализацию <a href="http://msdn.microsoft.com/en-us/library/microsoft.office.server.utilities.timerjobutility.aspx">TimerJobUtility</a>.</p>
+
+<p>Чтобы поместить WorkItem в очередь необходимо вызывать метод <a href="http://msdn.microsoft.com/en-us/library/ms476803.aspx" target="_blank">SPSite.AddWorkItem</a>. Остается самый интересный вопрос: где вызывать этот метод. Об этом, и многом другом в следующей статье.</p>  

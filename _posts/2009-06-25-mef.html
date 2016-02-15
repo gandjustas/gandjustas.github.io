@@ -1,0 +1,132 @@
+---
+layout: post
+title: MEF
+date: '2009-06-25T02:09:00.001+04:00'
+author: "Станислав Выщепан"
+tags:
+- IoC
+- Unity
+- ".NET"
+- MEF
+modified_time: '2009-06-25T02:13:10.677+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-8736523459035163013
+blogger_orig_url: http://blog.gandjustas.ru/2009/06/mef.html
+---
+
+<p>MEF – Managed Extensibility Framework – новая библиотека для создания композитных приложений. То есть приложений, которые собираются из отдельных частей.</p>  <p>Скачать его можно по адресу <a href="http://mef.codeplex.com/">http://mef.codeplex.com/</a>, версия на момент написания поста – Preview 5. На базе MEF построена Visual Studio 2010.</p>  <p>MEF по функциональности похожа на IoC-контейнеры, но авторы не стремились повторить функциональность существующих контейнеров. В MEF есть несколько уникальных фич, которых нету в&#160; IoC-контейнерах.</p>  <p>Сразу примеры, снова поиск фильмов. Возьмем основной код из <a href="http://gandjustas.blogspot.com/2009/01/ioc-unity.html">поста про Unity</a>.</p>  <pre class="c-sharp" name="code">
+// Фильм
+public class Movie
+{
+    public string Title { get; set; }
+    public string Director { get; set; }
+    public int Year { get; set; }
+}
+
+/// &lt;summary>
+/// Интерфейс репозитария
+/// &lt;/summary>
+public interface IMovieRepository
+{
+    IQueryable&lt;Movie&gt; GetMovies();
+}
+
+// Сервис поиска фильмов
+[Export]
+public class MovieFinder
+{
+    IMovieRepository _repository;
+
+    [ImportingConstructor]
+    public MovieFinder(IMovieRepository repository)
+    {
+        _repository = repository;
+    }
+
+    public IEnumerable&lt;Movie&gt; FindByTitle(string q)
+    {
+        return _repository
+                .GetMovies()
+                .Where(m =&gt; m.Title.Contains(q));
+    }
+}
+
+// Заглушка для репозитария
+[Export(typeof(IMovieRepository))]
+public class InMemoryMovieRepository : IMovieRepository
+{
+    public IQueryable&lt;Movie&gt; GetMovies()
+    {
+        return new[]   
+        {   
+            new Movie   
+            {   
+                Title = &quot;Гарри Поттер и узник Азкабана&quot;,   
+                Director = &quot;Альфонсо Куарон&quot;,   
+                Year = 2004   
+            },   
+            new Movie   
+            {   
+                Title = &quot;Звездные войны: Эпизод 2 - Атака клонов&quot;,   
+                Director = &quot;Джордж Лукас&quot;,   
+                Year = 2002   
+            },   
+            new Movie   
+            {   
+                Title = &quot;Властелин колец: Братство кольца&quot;,   
+                Director = &quot;Питер Джексон&quot;,   
+                Year = 2001   
+            },   
+        }.AsQueryable();
+    }
+}  </pre>
+
+<p>В коде атрибутами размечены экспортируемые классы и импортирующий конструктор.</p>
+
+<p>Теперь код, который это все использует.</p>
+
+<pre class="c-sharp" name="code">static void Main(string[] args)
+{
+    //Создание каталога &quot;частей&quot;
+    var catalog = new AssemblyCatalog(Assembly.GetExecutingAssembly());
+
+    //Создание контейнера
+    var container = new CompositionContainer(catalog);
+
+    //Получение экземпляра
+    var finder = container.GetExportedObject&lt;MovieFinder&gt;();
+}</pre>
+
+<p>В текущем виде мало отличается от примера с Unity.</p>
+
+<p>На самом деле в MEF гораздо более широкие возможности работы с импортами и экспортами. Экспортировать можно не только классы, но и методы, и значения свойств. Импортировать можно не только через конструктор, но и через свойства и даже через приватные поля (но это не будет работать в частично доверенном окружении).</p>
+
+<p>Упростим пример, класс Movie и Main останутся без изменений.</p>
+
+<pre class="c-sharp" name="code">
+[Export]
+public class MovieFinder
+{
+    [Import]
+    Func&lt;IQueryable&lt;Movie&gt;&gt; _getMovies = null;
+
+    public IEnumerable&lt;Movie&gt; FindByTitle(string q)
+    {
+        return _getMovies().Where(m =&gt; m.Title.Contains(q));
+    }
+}
+
+public class InMemoryMovieRepository
+{
+    [Export(typeof(Func&lt;IQueryable&lt;Movie&gt;&gt;))]
+    public IQueryable&lt;Movie&gt; GetMovies()
+    {
+        return new[]   
+        {   
+            //...
+        }.AsQueryable();
+    }
+}</pre>
+
+<p>Также важной фичей MEF является возможность поиска частей в сборках в каталоге на диске, а также мониторинг изменений этих сборок и перезагрузка частей. Кроме того есть API для пересборки частей при изменении.</p>
+
+<p>Но об этом в другой раз.</p>  

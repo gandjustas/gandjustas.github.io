@@ -1,0 +1,124 @@
+---
+layout: post
+title: "Развертывание полей таксономии в SharePoint"
+date: '2013-09-25T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint 2013
+- spcaf
+- taxonomy
+- provision
+- sp2013
+- managed metadata
+- SharePoint
+modified_time: '2013-09-25T10:00:07.331+04:00'
+thumbnail: http://lh5.ggpht.com/-5JPHoafQ3RM/UkIDL54zNnI/AAAAAAAAAWk/vkfez1avA-I/s72-c/wlEmoticon-smile%25255B2%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-4449125652529037018
+blogger_orig_url: http://blog.gandjustas.ru/2013/09/sharepoint-taxonomy-provision.html
+---
+
+<p>Поля таксономии, также известные как поля управляемых метаданных (managed metadata), появились в SharePoint 2010. Метаданные позволяют создавать иерархии терминов, которые можно использовать как справочные значения (c typeahead в UI) и, начиная с SharePoint 2013, для навигации.</p> <p>Метаданные поддерживают множество языков, синонимы и дополнительные свойства. Можно организовать навигацию по метаданным в библиотеке или фильтрацию по поддереву в поиске SharePoint.</p> <p>И все было бы прекрасно, но развернуть в составе WSP пакета поле метаданных в списке – очень нетривиальная задача. Можно конечно сделать с помощью кода, <a href="https://twitter.com/avishnyakov/status/379462645637595138" target="_blank">некоторые</a> даже очень любят этот подход, но в большом масштабе будет много копипасты и статический анализ делать гораздо сложнее.</p> <p>Если деплоить с помощью CAML, то возникает две проблемы, но об этом по порядку</p> <h3>Проблема первая – схема поля</h3> <p>Если вы погуглите, то найдете минимум четыре статьи как деплоить таксономические поля:</p> <ul> <li><a href="http://www.sharepointconfig.com/2011/03/the-complete-guide-to-provisioning-sharepoint-2010-managed-metadata-fields/">http://www.sharepointconfig.com/2011/03/the-complete-guide-to-provisioning-sharepoint-2010-managed-metadata-fields/</a>  <li><a href="http://www.instantquick.com/index.php/correctly-provisioning-managed-metadata-columns?c=elumenotion-blog-archive/random-whatnot">http://www.instantquick.com/index.php/correctly-provisioning-managed-metadata-columns?c=elumenotion-blog-archive/random-whatnot</a>  <li><a href="http://magenic.com/Blog/CorrectlyProvisioningManagedMetadataTaxonomyF">http://magenic.com/Blog/CorrectlyProvisioningManagedMetadataTaxonomyF</a>  <li><a href="http://www.wictorwilen.se/Post/How-to-provision-SharePoint-2010-Managed-Metadata-columns.aspx">http://www.wictorwilen.se/Post/How-to-provision-SharePoint-2010-Managed-Metadata-columns.aspx</a></li></ul> <p>Все рецепты приведут к <strong>неверному</strong> результату. Ближе всех к правде оказался последний пост, но и в нем есть проблемы.</p> <p>Ни в одном посте не указано как поле попадает в список. А именно от этого зависит как поле будет работать. <a href="http://gandjustas.blogspot.com/2013/09/3-sharepoint.html" target="_blank">В прошлом посте</a> я писал, что методы полей срабатывают, только если используется <em>ContenTypeRef</em> в схеме List Definition. Эти методы выполняют много работы – добавляют поля в список, привязывают event receiver_ы для синхронизации значений полей таксономии и catchall поля.</p> <p>Итак правильная схема таксономического поля:</p><pre class="brush: xml;">  &lt;Field
+       ID="{defbf0ed-377a-4e62-a980-0493ac0ef42e}"
+       Name="TaxonomyColumn"
+       DisplayName="Taxonomy Column"
+       Type="TaxonomyFieldType"
+       Required="FALSE"
+       Group="Custom Site Columns"
+       DisplaceOnUpgrade="TRUE" 
+       Overwrite="TRUE"
+  &gt;
+  &lt;/Field&gt;
+
+</pre>
+<p>И все <img class="wlEmoticon wlEmoticon-smile" style="border-top-style: none; border-bottom-style: none; border-right-style: none; border-left-style: none" alt="Улыбка" src="http://lh5.ggpht.com/-5JPHoafQ3RM/UkIDL54zNnI/AAAAAAAAAWk/vkfez1avA-I/wlEmoticon-smile%25255B2%25255D.png?imgmax=800">Нет, это не шутка.</p>
+<p>Если нужны множественные значения, то указать <em>Mult=”TRUE”</em> и <em>Type="TaxonomyFieldTypeMulti"</em>.</p>
+<p>Далее необходимо поле добавить в тип контента, а тип контента в список. Как писал в <a href="http://gandjustas.blogspot.com/2013/09/3-sharepoint.html" target="_blank">прошлом посте</a>. <em><strong>Сделаете по-другому – не заработает</strong></em>.</p>
+<p>На что стоит обратить внимание:</p>
+<ul>
+<li><em>TaxonomyFieldType</em> унаследован от <em>Lookup</em>, но атрибут <em>ShowField</em> нельзя указывать в схеме, это делается при добавлении поля в список. Если очень хочется указать, то <em>ShowField=”Term$Resources:core,Language” </em>и только так. 
+<li>Не надо указывать<em> Id</em> связанного текстового поля. В случае когда <em>Id</em> не указан – генерируется автоматически. 
+<li>Связанное поле деплоить не надо. Скорее всего вы это сделаете неправильно и у вас перестанет работать поиск. Кстати алгоритм создания связанного поля в 2010 и 2013 отличается. 
+<li>В элементе <em>Customizations</em> можно указать атрибуты поля по-умолчанию. Это проще всего сделать поправив свойства поля на сайте, а потом аккуратно скопировав в схему.</li></ul>
+<p>К сожалению на этом месте возникает вторая проблема.</p>
+<h3>Проблема вторая – привязка к набору терминов</h3>
+<p>Мало задеплоить поле, надо еще привязать его к набору терминов. Для этого у поля нужно задать два свойства <em>SspId</em> и <em>TermSetId</em>, соответственно <em>Id</em> службы управляемых метаданных и <em>Id</em> набора терминов. Эти два идентификатора <strong>не являются инвариантными</strong>, то есть могут быть разными в разных фермах. Имена групп и наборов терминов тоже могут варьироваться в зависимости от текущего языка.</p>
+<p>По сути есть два сценария развертывания:</p>
+<h5>TermSet уровня коллекции сайтов</h5>
+<p>Для каждой коллекции сайтов в хранилище Managed Metadata создается отдельная группа, видимая только в пределах этой коллекции сайтов. При при активации фичи с полем можно создавать (или импортировать) TermSet&nbsp; в локальную группу, а при деактивации – удалять.</p><pre class="brush: csharp;">public override void FeatureActivated(SPFeatureReceiverProperties properties)
+{
+    var site = properties.Feature.Parent as SPSite;
+    var web = site.RootWeb;
+    var field = web.Fields[FieldId] as TaxonomyField;
+
+    var session = new TaxonomySession(site);
+
+    var store = session.DefaultSiteCollectionTermStore;
+    //sp2010
+    //var group = store.Groups 
+    //                 .OfType&lt;Group&gt;()
+    //                 .First(g =&gt; g.IsSiteCollectionGroup);
+
+    //sp2013
+    var group = store.GetSiteCollectionGroup(site);
+
+    bool allTermsAdded;
+    string errorMessage;
+    var termSet = store.GetImportManager()
+                       .ImportTermSet(group, 
+                                      textReader, 
+                                      out allTermsAdded, 
+                                      out errorMessage);
+    if (!allTermsAdded)
+    {
+        termSet.Delete();
+        store.CommitAll();
+        throw new InvalidOperationException(errorMessage);
+    }
+            
+    field.SspId = store.Id;
+    field.TermSetId = termSet.Id;
+    field.Update(true);
+}
+
+public override void FeatureDeactivating(SPFeatureReceiverProperties properties)
+{
+    var site = properties.Feature.Parent as SPSite;
+    var web = site.RootWeb;
+    var field = web.Fields[FieldId] as TaxonomyField;
+
+    var session = new TaxonomySession(site);
+
+    var store = session.DefaultSiteCollectionTermStore;
+    store.GetTermSet(field.TermSetId).Delete();
+    store.CommitAll();
+}
+
+
+</pre>
+<p>Это самый простой метод. Вместо импорта можете использовать любой способ создания набора терминов.</p>
+<p>Недостатков у этого метода два:</p>
+<ul>
+<li>Нельзя создавать наборы терминов с фиксированными <em>Id</em>, так как фича может быть активирована на нескольких сайтах, а <em>Id</em> в рамках одной службы метаданных должны быть уникальны. 
+<li>Набор терминов виден только в коллекции сайтов и не может быть использован в других коллекциях, например для <em>XSP</em>.</li></ul>
+<p><strong>Внимание!</strong> Код выше не является referenece-кодом, его нельзя бездумно копипастить в свои решения. Для того чтобы он работал надо как минимум добавить логирование и проверку, что поле не настроено. FeatureActivated вызывается как минимум один раз для каждого экземпляра фичи, может быть и больше.</p>
+<h5>TermSet уровня службы</h5>
+<p>Если же вы хотите чтобы набор терминов не был привязан к одной коллекции сайтов, то нужно код развертывания набора терминов отделить от кода настройки поля.</p><pre class="brush: csharp;">public override void FeatureActivated(SPFeatureReceiverProperties properties)
+{
+    var site = properties.Feature.Parent as SPSite;
+    var web = site.RootWeb;
+    var field = web.Fields[FieldId] as TaxonomyField;
+
+    var termStoreId = new Guid((string)site.WebApplication.Properties[field.InternalName + ".SspId"]);
+    var termSetId = new Guid((string)site.WebApplication.Properties[field.InternalName + ".TermSetId"]);
+
+    field.SspId = termStoreId;
+    field.TermSetId = termSetId;
+    field.Update(true);
+}
+</pre>
+<p>Осталась только указать нужные <em>SspId</em> и <em>TermSetId</em> при установке WSP <strong>до</strong> активации фичи.&nbsp; Проще всего это сделать в PowerShell скрипте установки. Причем скриптом можно создать свое приложение-службу таксономии и полностью перенести все термы из среды разработки. Это легко сделать с помощью командлетов <a href="http://technet.microsoft.com/ru-ru/library/ff607847.aspx" target="_blank">Export-<em>SPMetadataWebServicePartitionData</em></a> и <a href="http://technet.microsoft.com/RU-RU/library/ff607667.aspx" target="_blank"><em>Import-SPMetadataWebServicePartitionData</em></a>. </p>
+<p>Этим же способом можно привязывать поле к уже существующему в целевой ферме набору терминов.</p>
+<h3>Заключение</h3>
+<p>Как и в прошлом посте, в этом я выкладываю правила для SPCAF (<a title="http://www.spcaf.com/" href="http://www.spcaf.com/">http://www.spcaf.com/</a>) , которые помогут контролировать правильность развертывания таксономии.</p>
+<iframe src="https://skydrive.live.com/embed?cid=E74E2842A8A54DC1&resid=E74E2842A8A54DC1%213720&authkey=AA1M9dnsZ_Ndnd4" width="98" height="120" frameborder="0" scrolling="no"></iframe>
+<p>PS. Кто заинтересовался как устроена таксономия внутри предлагаю почитать <a href="http://www.andrewconnell.com/sharepoint-2010-managed-metadata-in-depth-look-into-the-taxonomy-parts">http://www.andrewconnell.com/sharepoint-2010-managed-metadata-in-depth-look-into-the-taxonomy-parts</a></p>  

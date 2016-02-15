@@ -1,0 +1,53 @@
+---
+layout: post
+title: "Обновление SPTypeScript"
+date: '2013-08-06T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint 2013
+- js
+- sp2013
+- javascript
+- typescript
+- SharePoint
+modified_time: '2013-08-06T10:00:08.933+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1345587400736031949
+blogger_orig_url: http://blog.gandjustas.ru/2013/08/sptypescript.html
+---
+
+<p>Вчера была опубликовано обновление для <a href="http://sptypescript.codeplex.com/" target="_blank">SharePoint TypeScript Definitions</a>. Новую версию определений можно получить через NuGet:</p> <h5><a title="http://www.nuget.org/packages/sharepoint.TypeScript.DefinitelyTyped/" href="http://www.nuget.org/packages/sharepoint.TypeScript.DefinitelyTyped/" target="_blank">http://www.nuget.org/packages/sharepoint.TypeScript.DefinitelyTyped/</a></h5> <p>Или командой в Package Manager </p> <blockquote> <p>PM&gt; Install-Package sharepoint.TypeScript.DefinitelyTyped</p></blockquote> <h1>Что нового</h1> <h3>Анимация</h3> <p>В SharePoint 2013 добавили анимацию и, как всегда забыли, выложить документацию по этому делу. Я раскопал как работает анимация. К сожалению возможности библиотеки очень ограничены. Анимация работает для следующих атрибутов элементов:</p> <ul> <li>Позиция (x,y)  <li>Размеры (ширина, высота)  <li>Прозрачность</li></ul> <p>Есть два способа вызвать анимацию.</p> <p>Простой:</p><pre class="brush: js;">SPAnimationUtility.BasicAnimator.FadeOut(element); 
+SPAnimationUtility.BasicAnimator.FadeIn(element);
+SPAnimationUtility.BasicAnimator.Resize(element, width, height);
+SPAnimationUtility.BasicAnimator.Move(element, x, y);
+</pre>
+<p>И чуть более сложный:</p><pre class="brush: js;">var state = new SPAnimation.State();
+state.SetAttribute(SPAnimation.Attribute.Opacity, 0.2);
+var animation = new SPAnimation.Object(
+                        SPAnimation.ID.Basic_Opacity, 
+                        500,  /*duration*/
+                        element, 
+                        state);
+
+animation.RunAnimation(); 
+</pre>
+<p>Подробное описание можно посмотреть по ссылке - <a title="SPAnimation.d.ts" href="https://sptypescript.codeplex.com/SourceControl/latest#Definitions/SPAnimation.d.ts">SPAnimation.d.ts</a></p>
+<p>А также в проект добавлен пример: <a title="Animation.ts" href="https://sptypescript.codeplex.com/SourceControl/latest#SPTypeScript/Sample_Animation/Animation.ts">Animation.ts</a></p>
+<p>За этим простым API лежит довольно сложная реализация, в которой я пока еще не разобрался. В будущем, возможно, будет расширено описание типов анимации и добавится примеров использования.</p>
+<p></p>
+<h3>RequestExecutor</h3>
+<p>Это класс, позволяющий выполнять Ajax запросы с синтаксисом, похожим на jQuery:</p><pre class="brush: js;">var re = new SP.RequestExecutor(targetSiteUrl); 
+re.executeAsync({     
+    url: targetUrl,     
+    method: 'GET',     
+    success: function(response) {         
+        //console.log(response.body);         
+        //do stuff     
+    }
+});
+</pre>
+<p>Кроме обычных Ajax запросов этот класс позволяет делать кросс-доменные запросы в модели приложений для SharePoint 2013.</p>
+<p>Ранее я писал об этом классе в посте <a href="http://gandjustas.blogspot.com/2013/07/sharepoint-ajax.html" target="_blank">SharePoint и Ajax</a>.</p>
+<h3>Исправленное и дополненное описание SOD</h3>
+<p>В обновление вошли также последние версии определений для Script On Demand в SharePoint. Возможности SOD я описывал в предыдущем посте: <a href="http://gandjustas.blogspot.com/2013/07/sharepoint-script-on-demand.html" target="_blank">SharePoint Script On Demand</a>.</p>
+<p>&nbsp;</p>
+<p>На этом на сегодня все. Пишите код на TypeScript, качайте дефинишены, оставляйте фидбек на <a href="https://sptypescript.codeplex.com/" target="_blank">сайте проекта</a>.</p>  

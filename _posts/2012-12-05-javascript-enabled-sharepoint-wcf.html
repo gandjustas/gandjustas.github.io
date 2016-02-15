@@ -1,0 +1,59 @@
+---
+layout: post
+title: Javascript-enabled SharePoint WCF services
+date: '2012-12-05T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- javascript
+- WCF
+- SharePoint
+modified_time: '2012-12-05T10:00:06.756+04:00'
+thumbnail: http://lh4.ggpht.com/-cffLUlXp1ao/UL6RZ2MuWPI/AAAAAAAAAP4/6VFEh7lYaCU/s72-c/image_thumb%25255B5%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1508399268851048154
+blogger_orig_url: http://blog.gandjustas.ru/2012/12/javascript-enabled-sharepoint-wcf.html
+---
+
+<p>К сожалению очень мало толковой информации о том, как создать WCF веб-сервис для SharePoint, который будет доступен как для WS-* клиентов, так и для Javascript.</p> <p>Да-да, я знаю что уже вышел SharePoint 2013 и .NET 4.5, то что WCF уже не модно, и надо юзать WebAPI и REST. НО не факт что можно будет расширять API для SharePoint 2013, а WebAPI в SharePoint 2013 не работает (или по крайней мере это еще никто не сделал). </p> <p>Так что пока используем WCF, благо его возможностей более чем достаточно для решения задачи.</p> <p>Для начала надо поставить расширение студии <a href="http://visualstudiogallery.msdn.microsoft.com/en-us/ee876627-962c-4c35-a4a6-a4d89bfb61dc" target="_blank">CKS Dev</a> (правильно говорить “секасдев”, <a href="https://twitter.com/amarkeev" target="_blank">@amarkeev</a> гарантирует это), в нем есть шаблон для WCF сервиса</p> <p><a href="http://lh4.ggpht.com/-IGCEvvaBQMk/UL6RYwe6KvI/AAAAAAAAAP0/1wCKOv5Lq8s/s1600-h/image%25255B5%25255D.png"><img title="image" style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; display: inline; border-top-width: 0px" border="0" alt="image" src="http://lh4.ggpht.com/-cffLUlXp1ao/UL6RZ2MuWPI/AAAAAAAAAP4/6VFEh7lYaCU/image_thumb%25255B5%25255D.png?imgmax=800" width="480" height="333"></a> </p> <p>Этот пункт создает веб-сервис с BasicHttpBinding. </p> <p>В SharePoint не обязательно параметры указывать в web.config, достаточно указать Factory в .svc файле, что и делает данный шаблон.</p> <p>Какие есть Factory и зачем они нужны можно узнать <a href="http://msdn.microsoft.com/en-us/library/ff521586(v=office.14).aspx" target="_blank">по ссылке</a>.</p> <p>В принципе можно и этот сервис использовать в javascript коде, но придется долго и мучительно генерировать и парсить XML для SOAP. Чего делать крайне не хочется.</p> <p>Для того, чтобы работать с теплым ламповым JSON достаточно сделать несколько изменений.</p> <ol> <li>Скопировать .svc файл и поставить ему те же параметры развертывания, что у исходного сервиса. Я даю сервисам имя <em>&lt;servicename&gt;</em>.json.svc  <li>В новом файле .svc зменить <strong>MultipleBaseAddressBasicHttpBindingServiceHostFactory</strong> на <strong>MultipleBaseAddressWebServiceHostFactory</strong>  <li>В интерфейсе сервиса добавить атрибуты методам, например<br><pre class="brush: csharp;">[ServiceContract]
+public interface ITestService
+{
+    [OperationContract]
+    [WebGet(BodyStyle = WebMessageBodyStyle.Bare, 
+            RequestFormat = WebMessageFormat.Json, 
+            ResponseFormat = WebMessageFormat.Json)]
+    //[WebInvoke(Method="POST",
+    //        BodyStyle = WebMessageBodyStyle.Bare,
+    //        RequestFormat = WebMessageFormat.Json,
+    //        ResponseFormat = WebMessageFormat.Json)]
+    string HelloWorld();
+}</pre></li></ol>
+<p>И все, код сервиса править не надо. Атрибуты WebGet и WebInvoke можно найти в сборке System.SeviceModel.Web. </p>
+<p>Код для вызова сервиса (javascript):</p><pre class="brush: js;">var webServerRelativeUrl = _spPageContextInfo.webServerRelativeUrl != "/" 
+                           ? _spPageContextInfo.webServerRelativeUrl 
+                           : "";
+
+$.ajax({
+    type:"GET",
+    url: webServerRelativeUrl + "/_vti_bin/testservice.json.svc/HelloWorld",
+    dataType: 'json',
+    success: function (data) {
+        //success
+    },
+    error: function (error) {
+        //error
+    }
+});</pre>
+<p>Если вам понадобится изменить параметры WCF сервиса, такие как максимальный объем сообщения, то это можно сделать с помощью класса SPWcfServiceSettings</p><pre class="brush: csharp;">public override void FeatureInstalled(SPFeatureReceiverProperties properties)
+ {
+     SPWebService contentService = SPWebService.ContentService;
+     SPWcfServiceSettings wcfServiceSettings = new SPWcfServiceSettings();
+     wcfServiceSettings.ReaderQuotasMaxStringContentLength = Int32.MaxValue;
+     wcfServiceSettings.ReaderQuotasMaxArrayLength = Int32.MaxValue;
+     wcfServiceSettings.ReaderQuotasMaxBytesPerRead = Int32.MaxValue;
+     wcfServiceSettings.MaxReceivedMessageSize = Int32.MaxValue;            
+     
+     contentService.WcfServiceSettings["servicename.svc"] = wcfServiceSettings;
+
+     contentService.Update(true);
+ }
+</pre>
+<p>Если же вам понадобятся более глубокие возможности WCF, то можете создать свою ServiceHostFactory, отнаследовавшись от одной из тех, что предоставляет SharePoint.</p>  

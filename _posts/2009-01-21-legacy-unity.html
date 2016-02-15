@@ -1,0 +1,137 @@
+---
+layout: post
+title: "Рефакторинг legacy кода для использования Unity"
+date: '2009-01-21T11:09:00.001+03:00'
+author: "Станислав Выщепан"
+tags:
+- Unity
+- ".NET"
+- IoC-контейнер
+- "рефакторинг"
+modified_time: '2009-01-21T11:09:24.861+03:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-4309422568270616196
+blogger_orig_url: http://blog.gandjustas.ru/2009/01/legacy-unity.html
+---
+
+<p>Представим себе код, который был написан без применения принципов IoC.    <br />Например такой</p>  <pre class="c-sharp" name="code">public class AccountManager
+{
+    public void CreateAccount(string userName, string password)
+    {
+        var accountStore = new AccountStore();
+        accountStore.AddNewAccount(userName, password);
+    }
+
+    public bool Authenticate(string userName, string password)
+    {
+        var accountStore = new AccountStore();
+        if (accountStore.IsValidAccount(userName, password))
+        {
+            Session.CurrentSession.SetAuthToken(userName);
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    public bool IsUserInRole(string userName, string roleName)
+    {
+        var roleStore = new RoleStore();
+        return roleStore
+                .GetRolesForUser(userName)
+                .Contains(roleName);
+    }
+}</pre>
+
+<p>Классы AccountStore и RoleStore – это персистентные хранилища, а класс Session хранит информацию о текущем сеансе работы пользователя.</p>
+
+<p>Класс AccountManager применяется во многих местах, поэтому&#160; мы не можем сразу вынести все зависимости в конструктор.</p>
+
+<p>Поэтому сначала немного отрефакторим класс AccountManager и вынесем зависимости в открытые свойства, чтобы через них можно было подпихивать зависимости.</p>
+
+<pre class="c-sharp" name="code">public class AccountManager
+{
+    [Dependency]
+    public AccountStore AccountStore { get; set; }
+
+    [Dependency]
+    public RoleStore RoleStore { get; set; }
+
+    [Dependency(&quot;GetCurrentSession&quot;)]
+    public Func&lt;Session&gt; GetCurrentSession { get; set; }
+
+    public AccountManager()
+    {
+        AccountStore = new AccountStore();
+        RoleStore = new RoleStore();
+        GetCurrentSession = () =&gt; Session.CurrentSession;
+    }
+
+    public void CreateAccount(string userName, string password)
+    {
+        AccountStore.AddNewAccount(userName, password);
+    }
+
+    public bool Authenticate(string userName, string password)
+    {
+        if (AccountStore.IsValidAccount(userName, password))
+        {
+            GetCurrentSession().SetAuthToken(userName);
+            return true;
+        }
+        return false;
+    }
+
+    public bool IsUserInRole(string userName, string roleName)
+    {
+        return RoleStore
+                .GetRolesForUser(userName)
+                .Contains(roleName);
+    }
+}</pre>
+
+<p>В этом коде атрибутами сразу обозначены зависимости.&#160; Эти атрибуты будет анализировать Unity при инъекции зависимостей. 
+  <br />Так как при инъекции компоненты подбираются по типу, то для функцции GetCurrentSession желательно указать дополнительный строковый идентификатор.</p>
+
+<p>Теперь будем прикручивать IoC-контейнер. 
+  <br />Нам сначала понадобится создать синглтон контейнера Unity. 
+
+  <br />Многие, в том числе и я, считают синглтоны злом, но в данном случае немного зла необходимо.</p>
+
+<pre class="c-sharp" name="code">public static class UnitySingleton
+{
+    static IUnityContainer _instance = new UnityContainer();
+
+    public static UnitySingleton()
+    {
+	//Здесь будем конфигурировать контейнер
+        _instance
+            .RegisterType&lt;AccountStore&gt;()
+            .RegisterType&lt;RoleStore&gt;()
+            .RegisterInstance&lt;Func&lt;Session&gt;&gt;(
+                    &quot;GetCurrentSession&quot;,
+                    () =&gt; Session.CurrentSession);
+    }
+
+    public static IUnityContainer Instance
+    {
+        get
+        {
+            return _instance;
+        }
+    }
+}</pre>
+
+<p>Для регистрации метода получения текущей сессии используется RegisterInstance. Этот метод помещает в контейнер экземпляр объекта, указанный параметром. Контейнер удерживает этот объект все время, но с помощью LifetimeManager это поведение можно изменить.</p>
+
+<p>Теперь в конструкторе AccountManager напишем только одну строчку</p>
+
+<pre class="c-sharp" name="code">public AccountManager()
+{
+    UnitySingleton.Instance.BuildUp(this);
+}</pre>
+
+<p>После таких преобразований можно выделять интерфейсы классов, используемых внутри AccountManager чтобы ослабить зависимости между классами, а также проводить аналогичный рефакторинг для классов, использующих AccountManager. </p>
+
+<p>Когда сам класс AccountManager нигде не будет инстанцироваться явно через new, а только доставаться из контейнера, тогда можно будет рефакторить AccountManager, чтобы он получал&#160; все зависимости через конструктор.</p>  

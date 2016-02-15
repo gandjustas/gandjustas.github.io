@@ -1,0 +1,141 @@
+---
+layout: post
+title: "Используем IoC-контейнер Unity"
+date: '2009-01-21T00:22:00.001+03:00'
+author: "Станислав Выщепан"
+tags:
+- Unity
+- ".NET"
+- IoC-контейнер
+modified_time: '2009-01-21T01:05:59.112+03:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-7537845496532528788
+blogger_orig_url: http://blog.gandjustas.ru/2009/01/ioc-unity.html
+---
+
+<p>Unity – IoC-контейнер от Microsoft, разработанный группой Patterns&amp;Practicies. Найти его можно по адресу <a title="http://www.codeplex.com/unity" href="http://www.codeplex.com/unity">http://www.codeplex.com/unity</a>. Также Unity включен в состав Enterprise Library.</p>  <p>Будет использоваться версия 1.2, последняя на данный момент.</p>  <p>Итак приступим.    <br />Как <a href="http://martinfowler.com/articles/injection.html">завещал дядька Фаулер</a> будем рассматривать использования контейнера на примере программы, работающей&#160; с базой данных фильмов.</p>  <p>Чтобы использовать Unity в своей программе надо подключить сборки Microsoft.Practices.ObjectBuilder2 и Microsoft.Practices.Unity.</p>  <p>Нам надо написать класс, который позволяет искать фильмы по различным параметрам.</p>  <p>Предположим что фильмы описываются классом Movie </p>  <pre class="c-sharp" name="code">public class Movie
+{
+    public string Title { get; set; }
+    public string Director { get; set; }
+    public int Year { get; set; }
+}</pre>
+
+<p>Работу с БД завернем в интерфейс</p>
+
+<pre class="c-sharp" name="code">public interface IMovieRepository
+{
+    IQueryable&lt;Movie&gt; GetMovies();
+}</pre>
+
+<p>Теперь можем написать класс, который нам нужен. Следуя принципам IoC будем передавать зависимости через конструктор.</p>
+
+<pre class="c-sharp" name="code">public class MovieFinder
+{
+    IMovieRepository _repository;
+
+    public MovieFinder(IMovieRepository repository)
+    {
+        _repository = repository;
+    }
+
+    public IEnumerable&lt;Movie&gt; FindByTitle(string q)
+    {
+        return _repository
+                .GetMovies()
+                .Where(m =&gt; m.Title.Contains(q));
+    }
+}</pre>
+
+<p>В целях тестирования напишем простую реализацию IMovieRepository.</p>
+
+<pre class="c-sharp" name="code">public class InMemoryMovieRepository : IMovieRepository
+{
+    public IQueryable&lt;Movie&gt; GetMovies()
+    {
+        return new[]
+        {
+            new Movie
+            {
+                Title = &quot;Гарри Поттер и узник Азкабана&quot;,
+                Director = &quot;Альфонсо Куарон&quot;,
+                Year = 2004
+            },
+            new Movie
+            {
+                Title = &quot;Звездные войны: Эпизод 2 - Атака клонов&quot;,
+                Director = &quot;Джордж Лукас&quot;,
+                Year = 2002
+            },
+            new Movie
+            {
+                Title = &quot;Властелин колец: Братство кольца&quot;,
+                Director = &quot;Питер Джексон&quot;,
+                Year = 2001
+            },
+        }.AsQueryable();
+    }
+}</pre>
+
+<p>Напишем короткий код, который собирает все вместе.</p>
+
+<pre class="c-sharp" name="code">//Создаем контейнер
+var container = new UnityContainer();
+
+//Помещаем в контейнер реализацию для используемого интерфейса
+container.RegisterType&lt;IMovieRepository, InMemoryMovieRepository&gt;();
+
+//Собираем нужный объект
+var finder = container.Resolve&lt;MovieFinder&gt;();</pre>
+
+<p>Обратите внимание, что сам тип MovieFinder необязательно помещать в контейнер.</p>
+
+<p>Теперь можно заняться базой данных. 
+  <br />Создадим EF модель с одной сущностью Movie, эту сущность будем использовать вместо нашего класса Movie.</p>
+
+<p>Реализация IMovieRepository для БД будет выглядеть так: </p>
+
+<pre class="c-sharp" name="code">public class EFMovieRepository: IMovieRepository
+{
+    MoviesContainer _context;
+
+    public EFMovieRepository(MoviesContainer context)
+    {
+        _context = context;
+    }
+
+    public IQueryable&lt;Movie&gt; GetMovies()
+    {
+        return _context.Movies;
+    }
+}</pre>
+
+<p>Где MoviesContainer – тип контекста EF.</p>
+
+<p>Чтобы использовать этот репозитарий слегка изменим код основной программы.</p>
+
+<pre class="c-sharp" name="code">var container = new UnityContainer();
+container
+    .RegisterType&lt;IMovieRepository, EFMovieRepository&gt;()
+    .RegisterType&lt;MoviesContainer&gt;(new InjectionConstructor());
+
+var finder = container.Resolve&lt;MovieFinder&gt;();</pre>
+
+<p>Параметр new InjectionConstructor() для второго вызова RegisterType говорит контейнеру что надо использовать конструктор без параметров для создания объекта этого класса. Если конструктор в классе всего один, то задавать такой параметр не требуется.</p>
+
+<p>В приведенном выше коде есть один недостаток. Все объекты создаются каждый раз при вызове Resolve. Если мы не хотим пересоздавать каждый раз контекст EF (это длительная операция), то можем сделать его синглтоном. 
+  <br />Делается это очень просто, достаточно заменить вызов 
+
+  <br />.RegisterType&lt;MoviesContainer&gt;(new InjectionConstructor()) 
+
+  <br />на 
+
+  <br />.RegisterType&lt;MoviesContainer&gt;( 
+
+  <br />&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; new ContainerControlledLifetimeManager(), 
+
+  <br />&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; new InjectionConstructor()) 
+
+  <br /></p>
+
+<p>Первый параметр задает LifetimeManager, который, как понятно из названия, управляет временем жизни объекта. ContainerControlledLifetimeManager означает что объект будет жить пока живет контейнер, и для всех вызовов Resolve будет возвращаться один и тот же экземпляр контекста.</p>
+
+<p>В принципе этого достаточно чтобы начать использовать Unity в своем проекте.</p>  

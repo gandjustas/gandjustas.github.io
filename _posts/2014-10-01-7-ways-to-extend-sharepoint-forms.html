@@ -1,0 +1,74 @@
+---
+layout: post
+title: 7 способов улучшить поля в формах SharePoint 2013
+date: '2014-10-01T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint 2013
+- autocomplete
+- js
+- sp2013
+- javascript
+- typescript
+- "поиск"
+modified_time: '2014-10-01T21:02:34.844+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-2201537439267734861
+blogger_orig_url: http://blog.gandjustas.ru/2014/10/7-ways-to-extend-sharepoint-forms.html
+---
+
+<p>Кастомизация форм – очень больная тема в SharePoint. InfoPath фактически умер, новые способы кастомизации появятся не раньше следующего релиза (назначенного на конец 2015 года), а для использования SPServices нужен jQuery старой версии, что <a href="http://gandjustas.blogspot.com/2014/05/jquery-sharepoint-what-you-need-to-know.html" target="_blank">само по себе несет проблемы</a>, так еще и требует знания отображаемых имен полей, что делает решение ненадежным. Подробнее в моем <a href="http://gandjustas.justclick.ru/order/spclient/" target="_blank">курсе по клиентской разработке SharePoint</a>.</p> <p>Создавая <a href="http://sptypescript.codeplex.com/" target="_blank">TypeScript-определения для клиентской библиотеки SharePoint</a>&nbsp; сделал несколько примеров полей. Недавно я провел большой рефакторинг и выделил кастомные поля в отдельные, повторно используемые функции.</p> <p>Все функции содержатся в файле <a href="http://sptypescript.codeplex.com/SourceControl/latest#SPTypeScript/Extensions/typescripttemplates.ts" target="_blank">typescripttemplaes.ts</a>. Тем, кто не пользуется TypeScript (зря!), можно скачать .js файл в том же каталоге.</p> <p>Как пользоваться typescripttemplates:</p> <ol> <li>Скачать файл и добавить .js в проект  <li>Сделать свой файл скрипта для полей, такого вида:<br><pre class="brush: js;">module _ {
+    function init() {
+        CSR.override()
+            .lookupAddNew("Master", "Add New Master item", true)
+            .register();        
+    }
+
+    SP.SOD.executeOrDelayUntilScriptLoaded(init, "typescripttemplates.ts");
+
+    SP.SOD.executeOrDelayUntilScriptLoaded(function () {
+        RegisterModuleInit(SPClientTemplates.Utility.ReplaceUrlTokens("~site/YOUR_SCRIPT_PATH.js"), init);
+    }, "sp.js");
+} </pre>
+<li>Вписать адрес скрипта в ReplaceUrlTokens и вызовы функций между .override() и .register() 
+<li>В атрибут JSLink поля\формы\типа контента вписать строку такого вида: “<em>~site/PATH/typescripttemplates.js|~site/YOUR_SCRIPT_PATH.js</em>”.</li></ol>
+<p>Итак сами функции:</p>
+<h2></h2>
+<h2>№1 Установка начального значения поля в формах</h2><pre class="brush: js;">CSR.override()
+   .setInitialValue("FieldInternalName", ANY_VALUE)
+   .register();      
+</pre>
+<p>Пригодится когда значения полей передаются в Url или через локальный кеш. Значение нужно передавать во внутреннем формате, который использует CSR.</p>
+<h2>№2 Скрытие поля</h2><pre class="brush: js;">CSR.override()
+   .makeHidden("FieldInternalName")
+   .register();      
+</pre>
+<p>Скрывает поле на форме, в представлении, и даже в режиме редактирования таблицы.</p>
+<h2>№3 Установка поля в Read-Only в формах</h2><pre class="brush: js;">CSR.override()
+   .makeReadOnly("FieldInternalName")
+   .register();      
+</pre>
+<p>Заменяет контрол ввода на контрол отображения. Пока не работает в для поля выбора пользователя.</p>
+<h2>№4 Вычисляемое значение поля</h2><pre class="brush: js;">CSR.override()
+   .computedValue("Title", function(x) {return SPClientTemplates.Utility.ParseLookupValue(x).LookupValue; }, "SOME_LOOKUP_FIELD")
+   .register();      
+</pre>
+<p>Автоматически задает значение поля при изменении в связанном поле.</p>
+<h2>№5 Добавление ссылки на добавление нового элемента в Lookup</h2><pre class="brush: js;">CSR.override()
+   .lookupAddNew("Master", "Add New Master item", true)
+   .register();      
+</pre>
+<p>Добавляет рядом с Lookup-полем ссылку, которая открывает форму добавления в связанный список. Последний параметр задает открывать ли форму в диалоге или переходом на страницу формы</p>
+<h2>№6 Фильтрация Lookup</h2><pre class="brush: js;">CSR.override()
+   .filteredLookup("Master", '&lt;BeginsWith&gt;&lt;FieldRef Name ="Title" /&gt;&lt;Value Type = "Text" &gt;{Title}&lt;/Value&gt;&lt;/BeginsWith&gt;')
+   .register();      
+</pre>
+<p>Вместо статического списка выбора связанного значения делает динамический запрос с помощью предиката. В предикат также можно указать ссылки на другие поля.</p>
+<h2>№7 Lookup на основе поиска</h2><pre class="brush: js;">CSR.override()
+   .seachLookup("LookupFieldInternalName")
+   .register();      
+</pre>
+<p>Заменяет стандартный элемент выбора на компонент autofill, входящий в SharePoint. Для получения связанных элементов используется поиск. Будет работать даже для очень больших списков. В ближайшее время будет добавлена возможность указывать запрос, который выполняется при получении элементов.</p>
+<p>Для этого поля надо в JSLink добавить ссылки на файлы autofill.js и sp.search.js – “~site/PATH/typescripttemplates.js|~site/YOUR_SCRIPT_PATH.js|autofill.js(d)|sp.search.js(d)”</p>
+<p>Заключение</p>
+<p>Качайте, пользуйтесь, пишите фидбек здесь и на сайте проекта - <a title="http://sptypescript.codeplex.com/workitem/list/basic" href="http://sptypescript.codeplex.com/workitem/list/basic">http://sptypescript.codeplex.com/workitem/list/basic</a>. Кроме указанных выше готовых контролов, есть еще куча хелперов, которые вам помогут делать свои шаблоны полей. </p>
+<p>Если хелперы будут популярны, то я выложу библиотеку в NuGet.</p>  

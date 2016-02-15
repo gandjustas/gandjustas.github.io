@@ -1,0 +1,55 @@
+---
+layout: post
+title: "Применение mQuery в SharePoint 2013"
+date: '2013-07-15T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint 2013
+- mQuery
+- sp2013
+- typescript
+- jQuery
+modified_time: '2013-07-24T15:29:09.177+04:00'
+thumbnail: http://lh6.ggpht.com/-nRN51_IGEG0/UeFBJoSqPKI/AAAAAAAAAUI/5h6OgGNHHc4/s72-c/mQuery-intellisence%25255B1%25255D_thumb%25255B3%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-6548171140643125044
+blogger_orig_url: http://blog.gandjustas.ru/2013/07/mquery-sharepoint-2013.html
+---
+
+<p>Нет, в заголовке не опечатка. Я действительно имею ввиду mQuery, а не jQuery. mQuery – аналог библиотеки jQuery, включенный в состав SharePoint 2013. Как обычно эта библиотека недокументированна и известна очень малому количеству людей. Исследовал её <a href="http://twitter.com/avishnyakov" target="_blank">Антон Вишняков</a> и опубликовал <a href="http://spdevlab.com/2013/07/01/getting-started-with-mquerym-in-sharepoint-2013-and-sharepoint-online/" target="_blank">обзор с примером в своем блоге</a>. </p> <h3>Что такое mQuery</h3> <p>Группа разработчиков SharePoint нашла критический недостаток в jQuery – её написали не они. И поэтому решили сделать свой jQuery с пасьянсом и куртизанками. Это конечно шутка.</p> <p>Правда заключается в том, что jQuery – фактически стандарт для веб-разработки, но её довольно проблематично использовать в SharePoint. Часто возникают конфликты с другими расширениями, которые тоже хотят использовать jQuery других версий. Кроме того переопределение переменной <strong>$</strong> в клиентском скрипте ломает Asset Picker и еще некоторые функции в SharePoint 2010 (в 2013 тоже ломается asset picker). </p> <p>Поэтому было решено включить подмножество jQuery в SharePoint 2013, которое назвали mQuery. Точка входа – переменная <strong>m$</strong>, доступное API во многом повторяет jQuery, но есть отличия.</p> <p><a href="http://lh5.ggpht.com/-otVRaOShxMs/UeFBJP_Xr5I/AAAAAAAAAUA/Z_xngWp7b4c/s1600-h/mQuery-intellisence%25255B1%25255D%25255B3%25255D.png"><img title="mQuery-intellisence[1]" style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; display: inline; border-top-width: 0px" border="0" alt="mQuery-intellisence[1]" src="http://lh6.ggpht.com/-nRN51_IGEG0/UeFBJoSqPKI/AAAAAAAAAUI/5h6OgGNHHc4/mQuery-intellisence%25255B1%25255D_thumb%25255B3%25255D.png?imgmax=800" width="554" height="346"></a> </p> <p>Вы спросите – <em>а почему было не включить саму библиотеку jQuery в SharePoint?</em> Увы, ответа на этот вопрос я не знаю, как и не знаю планов на будущее mQuery.</p> <h3>Как использовать mQuery</h3> <p>На всех страницах SharePoint 2013 библиотека mQuery уже присутствует как OnDemand, то есть загружаемая о требованию. Для использования mQuery надо написать такой код:</p><pre class="brush: js; ">SP.SOD.executeFunc('mQuery.js', 'm$', function() {
+    // DO STUFF
+}
+</pre>
+<p>Если вы разрабатываете с использованием <a href="http://typescriptlang.org/" target="_blank">TypeScript</a>, то можете взять определения <a href="https://sptypescript.codeplex.com/releases/view/109243" target="_blank">из проекта SPTypeScript</a>, и получите не только intellisence в студии, но и проверку типов при компиляции.</p>
+<p>Если же пишете JavaScript в VisualStudio, то в начале js файла добавьте строку:</p><pre>/// &lt;reference path=”C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\15\TEMPLATE\LAYOUTS\mQuery.debug.js” /&gt;
+
+</pre>
+<p>Далее вы можете использовать знакомые методы</p><pre class="brush: js;">//Код выполняется после загрузки страницы
+m$.ready(function() { }) 
+
+//Создание обработчика событий для списка
+m$("selector").click(function (e) { }) 
+
+//Сокрытие элементов
+m$("selector").css("display", "none") 
+
+//и многое другое
+
+</pre>
+<p>Полный перечень функций можно посмотреть <a href="http://sptypescript.codeplex.com/SourceControl/latest#Definitions/mQuery.d.ts">тут</a>. </p>
+<h3>Ограничения mQuery</h3>
+<ul>
+<li>Работает только на страницах SharePoint (использует некоторые особенности SharePoint и MicrosoftAjax). 
+<li>Не содержит множество shortcut-функций, например отсутствуют функции show и hide, text, val. 
+<li>Не содержит функцию ajax и производные, предполагается использование JSOM для общения с сервером. 
+<li>Не содержит анимацию, в SharePoint 2013 своя библиотека для анимации. 
+<li>Нет интерфейса плагинов. 
+<li>Нет возможности конструирования html.</li></ul>
+<h3>Пример</h3>
+<p><a href="http://http://twitter.com/avishnyakov" target="_blank">Антон Вишняков</a> в своем блоге <a href="http://spdevlab.com/2013/07/01/getting-started-with-mquerym-in-sharepoint-2013-and-sharepoint-online/" target="_blank">сделал пример использования mQuery</a>. В примере создается динамическая таблица, в которой можно добавлять и удалять строки.</p>
+<p>Выглядит примерно так:</p>
+<p><a href="http://lh5.ggpht.com/-aE4exVTh9qk/UeFBKWzC4SI/AAAAAAAAAUQ/mEBdV77cLT0/s1600-h/image%25255B4%25255D.png"><img title="image" style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; display: inline; border-top-width: 0px" border="0" alt="image" src="http://lh6.ggpht.com/-VhOenwUvnc4/UeFBK2fVBTI/AAAAAAAAAUY/xg63nVjqA1Y/image_thumb%25255B2%25255D.png?imgmax=800" width="554" height="297"></a> </p>
+<p>Этот пример я сконвертировал в app на TypeScript и вы можете скачать его и запустить в Office 365, не имея установленного SharePoint на вашем компьютере.</p>
+<p>Этот пример (и множество других) можно скачать <a href="http://sptypescript.codeplex.com/releases/view/109243" target="_blank">с сайта проекта SPTypeScript</a>.</p>
+<h3>Заключение</h3>
+<p>Очень рекомендую ознакомиться с возможностями mQuery, возможно вам не придется тащить в своих решениях jQuery и бороться с проблемами совместимости.</p>
+<p>Также рекомендую подписаться на <a href="http://spdevlab.com/" target="_blank">блог Антона</a> и начать использовать <a href="http://sptypescript.codeplex.com/" target="_blank">TypeScript для проектов на SharePoint</a>.</p>  

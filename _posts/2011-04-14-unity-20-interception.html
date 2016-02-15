@@ -1,0 +1,97 @@
+---
+layout: post
+title: Unity 2.0 Interception
+date: '2011-04-14T17:46:00.001+04:00'
+author: "Станислав Выщепан"
+tags:
+- Unity
+- ".NET"
+- AOP
+modified_time: '2011-04-14T17:47:52.680+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-684825836227096487
+blogger_orig_url: http://blog.gandjustas.ru/2011/04/unity-20-interception.html
+---
+
+<p>Ранее я писал про механизмы <a href="http://gandjustas.blogspot.com/2009/01/aop-unity.html" target="_blank">AOP в Unity 1.0</a> (или 1.2 на тот момент). Недавно увидел <a href="http://www.handcode.ru/2011/04/aop-unity-20.html" target="_blank">этот пост</a>, с примером для Unity 2.0. </p>  <p>В первой версии было фактически две возможности для задания перехватчиков вызовов: это атрибуты на классах или сложный код (или xml), задающий условия по которым будут срабатывать обработчики вызовов.</p>  <p>Оба варианта довольно плохие, первый заставляет править существующий код, второй просто неподъемный. В Unity 2.0 исправили ситуацию с помощью так называемых InterceptionBehavior.</p>  <p>Пример кода из <a href="http://www.handcode.ru/2011/04/aop-unity-20.html" target="_blank">поста</a> в новом стиле.</p>  <p>&#160;</p>  <pre class="brush: csharp;">using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using Microsoft.Practices.Unity;
+using Microsoft.Practices.Unity.InterceptionExtension;
+using System.Transactions;
+
+namespace Unity20Interception
+{
+public interface IAccountService
+{
+    // Хотим чтобы метод Withdraw выполнялся под транзакцией,
+    // Но ничего помечать не будем.
+    void Withdraw(decimal amount);
+}
+
+public class AccountService : IAccountService
+{
+    public void Withdraw(decimal amount)
+    {
+        if (amount &lt; 0 || amount &gt; 1000)
+            throw new ArgumentOutOfRangeException(&quot;amount&quot;);
+    }
+}
+
+//Собственно класс обработчика вызовов
+public class TransactionBehavior: IInterceptionBehavior
+{
+
+    #region IInterceptionBehavior Members
+
+    public IEnumerable&lt;Type&gt; GetRequiredInterfaces()
+    {
+        return Enumerable.Empty&lt;Type&gt;();
+    }
+
+    public IMethodReturn Invoke(IMethodInvocation input, GetNextInterceptionBehaviorDelegate getNext)
+    {
+        using (TransactionScope transaction = new TransactionScope())
+        {
+            var result = getNext()(input, getNext);
+
+            if (result.Exception == null)
+            {
+                // исключений не возникло, завершим транзакцию
+                transaction.Complete();
+                Console.WriteLine(&quot;Transaction commited&quot;);
+            }
+            return result;
+        }
+    }
+
+    public bool WillExecute
+    {
+        get { return true; }
+    }
+
+    #endregion
+}
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        var container = new UnityContainer().AddNewExtension&lt;Interception&gt;();
+        container                
+            .RegisterType&lt;IAccountService, AccountService&gt;(
+                //Устанавливаем способ перехвата
+                new Interceptor&lt;InterfaceInterceptor&gt;(), 
+                //Устанавливаем обработчик
+                new InterceptionBehavior&lt;TransactionBehavior&gt;() 
+            );
+
+        var service = container.Resolve&lt;IAccountService&gt;();
+        service.Withdraw(33); // транзакция пройдет успешно
+        service.Withdraw(-6);
+    }
+}</pre>
+
+<p>Также новых механизм перехвата позволяет добавлять к сгенерированному классу-перехватчику необходимые интерфейсы. Например можно сделать таким образом <em>behavior</em>, который добавляет реализацию INotifyPropertyChanged. 
+
+  <br /><a href="http://msdn.microsoft.com/en-us/library/ff660851(v=PandP.20).aspx">http://msdn.microsoft.com/en-us/library/ff660851(v=PandP.20).aspx</a></p>  

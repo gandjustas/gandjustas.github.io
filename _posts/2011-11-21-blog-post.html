@@ -1,0 +1,70 @@
+---
+layout: post
+title: "В поисках неподвижной точки"
+date: '2011-11-21T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- C#
+modified_time: '2011-11-21T10:00:01.591+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1257112628637284684
+blogger_orig_url: http://blog.gandjustas.ru/2011/11/blog-post.html
+---
+
+<p>Наверное все знают что в C# 3.0 лямбда выражения, которые позволяют записывать анонимные функции (то есть функции без имени).    <br />Например: </p>  <pre class="code">seq.Select(x =&gt; x * x);</pre>
+
+<p>Выражение x =&gt; x*x является функцией одного аргумента и возвращает значение квадрата числа. </p>
+
+<p>А теперь попробуем&#160; записать функцию факториала:</p>
+
+<pre class="code"><span style="color: #2b91af">Func</span>&lt;<span style="color: blue">int</span>, <span style="color: blue">int</span>&gt; f = x =&gt; x &gt; 1 ? x * f(x - 1) : 1;</pre>
+
+<p>Компилятор C# такое выражение не компилирует. Ругается на неинициализированную переменную f в правой части. Кстати <a href="http://msdn.com/roslyn" target="_blank">roslyn</a> такое прожевывает нормально. Тем не менее код выше не является выражением, его нельзя передать параметром в функцию.</p>
+
+<p>Попробуем превратить его в выражение.</p>
+
+<pre class="code">fact = f =&gt; x =&gt; x &gt; 1 ? x * f(x - 1) : 1;</pre>
+
+<p>Тип выражения справа получится <span style="color: #2b91af">Func</span>&lt;<span style="color: #2b91af">Func</span>&lt;<span style="color: blue">int</span>,<span style="color: blue">int</span>&gt;, <span style="color: #2b91af">Func</span>&lt;<span style="color: blue">int</span>,<span style="color: blue">int</span>&gt;&gt;, параметром передается рекурсивный вызов, чтобы его сформировать надо снова подставить рекурсивный вызов в функцию.&#160; Получится что-то вроде бесконечного вызова 
+
+  <br />fact(fact(fact(fact(…. но реально число вызовов конечно. </p>
+
+<h5>Немного теории</h5>
+
+<p>Для функций f которая принимает аргумент и возвращают значения из одного и того же множества (на C# это записывается как Func&lt;T,T&gt;, а в математике T –&gt; T) может существовать “<a href="http://ru.wikipedia.org/wiki/%D0%9D%D0%B5%D0%BF%D0%BE%D0%B4%D0%B2%D0%B8%D0%B6%D0%BD%D0%B0%D1%8F_%D1%82%D0%BE%D1%87%D0%BA%D0%B0" target="_blank">неподвижная точка</a>” x, для которой f(x) = x. Чтобы находить неподвижные точки можно построить комбинатор g:(T-&gt;T)-&gt;T, такой что g(f) = x и f(x) = x. Функция g называется <a href="http://en.wikipedia.org/wiki/Fixed-point_combinator" target="_blank">комбинатором неподвижной точки</a>.</p>
+
+<p>В лямбда исчислении есть теоремы доказывающие существование неподвижных точек у некоторых функций и формулы&#160; комбинаторов. Не все формулы можно перенести в типизированные языки.</p>
+
+<p>Краткая формула для рекурсивного комбинатора неподвижной точки Y выглядит как Y(g) = g(Y(g)). Если выполнить подстановку то получится g(g(Y(g))), выполняя подстановку бесконечное число раз получим как раз то что нам нужно для факториала.</p>
+
+<h5>Вернемся к практике</h5>
+
+<p>Попробуем написать на C#</p>
+
+<pre class="code"><span style="color: blue">static </span>T Y&lt;T&gt;(<span style="color: #2b91af">Func</span>&lt;T, T&gt; f)
+{
+    <span style="color: blue">return </span>f(Y(f));
+}</pre>
+
+<p>Но язык C# использует энергичные вычисления и Y-комбинатор сразу попытается посчитать бесконечную рекурсию. Что приведет к StackOverflowException.</p>
+
+<p>Ленивость вычислений как всегда вводится через лямбды.</p>
+
+<pre class="code"><span style="color: blue">static </span><span style="color: #2b91af">Func</span>&lt;T, T&gt; Y&lt;T&gt;(<span style="color: #2b91af">Func</span>&lt;<span style="color: #2b91af">Func</span>&lt;T, T&gt;, <span style="color: #2b91af">Func</span>&lt;T, T&gt;&gt; f)
+{
+    <span style="color: blue">return </span>x =&gt; f(Y(f))(x);
+}</pre>
+
+<p>После этого вполне можно написать следующий код:</p>
+
+<pre class="code"><span style="color: blue">var </span>fact = Y&lt;<span style="color: blue">int</span>&gt;(f =&gt; x =&gt; x &gt; 1 ? x * f(x - 1) : 1);</pre>
+
+
+<p>Или например </p>
+
+<pre class="code">seq.Select(Y&lt;<span style="color: blue">int</span>&gt;(f =&gt; x =&gt; x &gt; 1 ? x * f(x - 1) : 1));</pre>
+
+<p>Таким образом получили возможность записывать анонимную рекурсию в виде выражения.</p>
+
+<h5>Заключение</h5>
+
+<p>Знание фундаментальной теории очень помогает писать программы и зачастую дает возможность улучшить их крайне неожиданными способами. Изучение таких тем никогда не будет лишним багажом.</p>  

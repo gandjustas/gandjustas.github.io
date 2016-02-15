@@ -1,0 +1,222 @@
+---
+layout: post
+title: "Обновление SharePoint app на TypeScript"
+date: '2013-08-13T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- mQuery
+- sp2013
+- "код"
+- javascript
+- typescript
+- SharePoint
+modified_time: '2013-08-13T10:00:00.118+04:00'
+thumbnail: http://lh6.ggpht.com/-Iba-QXRa4Fo/Ugloi1gVacI/AAAAAAAAAWU/uItJdYJA_nE/s72-c/image_thumb%25255B6%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-7501625107302915015
+blogger_orig_url: http://blog.gandjustas.ru/2013/08/sharepoint-app-typescript.html
+---
+
+<p>В марте я писал про то, <a href="http://gandjustas.blogspot.com/2013/03/sharepoint-2013-typescript.html" target="_blank">как разрабатывать приложения для SharePoint c помощью TypeScript</a>. С тех пор прошло почти полгода, появились новые версии компилятора TypeScript (не совместимые со старыми) и улучшились описания типов для SharePoint (<a href="http://sptypescript.codeplex.com" target="_blank">http://sptypescript.codeplex.com</a>). Настало время обновить пример.</p> <h3>Пример приложения</h3> <p>Приложение позволяет фиксировать часы на рабочем месте.</p> <p><a href="http://lh3.ggpht.com/-mzBgwkbIzGI/UgloiJldm5I/AAAAAAAAAWM/Sl_BZZBoJMQ/s1600-h/image%25255B4%25255D.png"><img title="image" style="border-left-width: 0px; border-right-width: 0px; background-image: none; border-bottom-width: 0px; padding-top: 0px; padding-left: 0px; display: inline; padding-right: 0px; border-top-width: 0px" border="0" alt="image" src="http://lh6.ggpht.com/-Iba-QXRa4Fo/Ugloi1gVacI/AAAAAAAAAWU/uItJdYJA_nE/image_thumb%25255B6%25255D.png?imgmax=800" width="554" height="352"></a></p> <p>Приложение ведет список всех временных интервалов, зафиксированных нажатием кнопок check-in\check-out. Пользователю отображается сумма всех его часов.</p> <p>Также есть app part с тем же функционалом, но доступный для размещения на любой странице сайта.</p> <p>Скачать можно по ссылке - <a title="TimeTrackerApp v0.9" href="https://sptypescript.codeplex.com/downloads/get/716915">TimeTrackerApp v0.9</a></p> <h4>Подготовка</h4> <p>Для начала необходимо:</p> <ul> <li>Установить <a href="http://aka.ms/OfficeDevToolsForVS2012" target="_blank">средства разработки приложений для SharePoint 2013</a>.  <li>Установить <a href="http://vswebessentials.com/" target="_blank">Web Essentials 2012</a>.  <li>Установить <a href="http://go.microsoft.com/fwlink/?LinkID=266563" target="_blank">TypeScript</a>.  <li>Если у вас еще нет Office365, то можете <a href="http://msdn.microsoft.com/en-us/library/office/apps/fp179924(v=office.15)" target="_blank">создать 90-дневный trial</a> для отладки и тестирования.  <li>Создать проект SharePoint Hosted приложения.</li></ul> <p>Для того чтобы при сборке проекта выполнялась компиляция&nbsp; TypeScript необходимо добавить в .csproj файл следующие элементы:</p><pre class="brush: xml;">&lt;PropertyGroup&gt;
+    &lt;TypeScriptTarget&gt;ES3&lt;/TypeScriptTarget&gt;
+    &lt;TypeScriptIncludeComments&gt;true&lt;/TypeScriptIncludeComments&gt;
+    &lt;TypeScriptSourceMap&gt;true&lt;/TypeScriptSourceMap&gt;
+&lt;/PropertyGroup&gt;
+&lt;Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\TypeScript\Microsoft.TypeScript.targets" /&gt;
+</pre>
+<h4>Библиотеки и определения</h4>
+<p>Прошлый раз я использовал библиотеки jQuery<strong>&nbsp;</strong>и knockoutjs с плагинами. В этот раз решил обойтись стандартными средствами SharePoint и небольшим хелпером из проекта sptypescript.</p>
+<p>Чтобы все заработало необходимо добавить NuGet пакет <em>sharepoint.TypeScript.DefinitelyTyped </em>(<a title="http://www.nuget.org/packages/sharepoint.TypeScript.DefinitelyTyped/" href="http://www.nuget.org/packages/sharepoint.TypeScript.DefinitelyTyped/" target="_blank">http://www.nuget.org/packages/sharepoint.TypeScript.DefinitelyTyped/</a>). Далее необходимо скопировать файл <a title="typescripttemplates.ts" href="https://sptypescript.codeplex.com/SourceControl/latest#SPTypeScript/Extensions/typescripttemplates.ts" target="_blank">typescripttemplates.ts</a> в проект, при необходимости поправить ссылку на sharepoint.d.ts.</p>
+<h4>Представление списка</h4>
+<p>Прошлый раз интерфейс был сделан на knockoutjs с асинхронной загрузкой данных. Это вызывало заметный лаг между отображением страницы и появлением интерфейса. Такое поведение очень сильно не нравилось и хотелось сделать лучше. </p>
+<p>В новой версии интерфейс сделан на основе представления списка. Представление генерирует данные прямо в разметку страницы, и не требуется асинхронная загрузка. Кроме того, представление формирует разметку до рисования страницы. Для пользователя все выглядит, как-будто рисование происходит на сервере.</p>
+<p>Для создания представления я воспользовался инструментами visual studio, но запрос пришлось вручную написать (незначимые детали убрал):</p><pre class="brush: xml;">&lt;View BaseViewID="2" Hidden="TRUE" &gt;
+  &lt;ViewFields&gt;
+    &lt;FieldRef Name="DurationInHours" /&gt;
+    &lt;FieldRef Name="ID" /&gt;
+  &lt;/ViewFields&gt;
+  &lt;Query&gt;
+    &lt;Where&gt;
+      &lt;Eq&gt;
+        &lt;FieldRef Name="Author"/&gt;
+        &lt;Value Type="Integer"&gt;
+          &lt;UserID/&gt;
+        &lt;/Value&gt;
+      &lt;/Eq&gt;
+    &lt;/Where&gt;
+  &lt;/Query&gt; 
+  &lt;JSLink&gt;~site/scripts/typescripttemplates.js|~site/scripts/view.js&lt;/JSLink&gt;
+&lt;/View&gt;
+
+</pre>
+<p>Это представление получает все элементы автора.</p>
+<p>Для того, чтобы поместить представление на страницу необходимо написать следующий код в Elements.xml</p><pre class="brush: xml;">&lt;Elements xmlns="http://schemas.microsoft.com/sharepoint/"&gt;
+  &lt;Module Name="Pages"&gt;
+    &lt;File Path="Pages\Default.aspx" Url="Pages/Default.aspx" ReplaceContent="TRUE" &gt;
+      &lt;View BaseViewID="2" List="Log" WebPartZoneID="full"  /&gt;
+    &lt;/File&gt;
+  &lt;/Module&gt;
+&lt;/Elements&gt;</pre>
+<p>Достаточно чтобы на странице <em>Default.aspx</em> была размещена зона веб-частей с идентификатором <em>full</em>.</p>
+<p>Client-side rendering код представления:</p><pre class="brush: js;">CSR
+.override(10000, 2)
+.onPreRender(/* omitted for clarity */)
+.header(' ')
+.body(renderTemplate)
+.footer(' ')
+.onPostRender(initializeModel)
+.onPostRender(suppressDefault)
+.register();</pre>
+<p>Хелпер в файле <a title="typescripttemplates.ts" href="https://sptypescript.codeplex.com/SourceControl/latest#SPTypeScript/Extensions/typescripttemplates.ts" target="_blank">typescripttemplates.ts</a> реализует fluent-итерфейс для шаблонов&nbsp; клиентского рендеринга.</p>
+<p>Как оказалось нельзя просто так взять и переопределить шаблон View у представления, потому что он вызывается два раза. Если хочется сформировать полностью свою разметку, то надо переопределить body, header, footer, а еще написать код, который скрывает элемент для переключения страниц.</p>
+<p>Еще один недостаток переопределения представления списка – при клике на представление появляется ribbon. </p>
+<p>От обоих недостатков избавляет функция <em>suppressDefault</em>:</p><pre class="brush: js;">function suppressDefault(ctx: SPClientTemplates.RenderContext_InView) {
+    var wpzoneCell = $get('MSOZoneCell_WebPart' + ctx.wpq);
+    wpzoneCell.onkeyup = wpzoneCell.onmouseup = function () { };
+
+    var footer = $get('scriptPaging' + ctx.wpq);
+    footer.style.display = 'none';
+}
+</pre>
+<h4>Формирование разметки</h4>
+<p>Для удобства работы я сделал расширение контекста рендеринга:</p><pre class="brush: js;">interface TimeTrackerView extends SPClientTemplates.RenderContext_InView {
+    totalHours: number;
+    openLogItem: number;
+    buttonText: string;
+    spanId: string;
+    buttonId: string;
+}
+</pre>
+<p>Функция в onPreRender получает необходимые данные:</p><pre class="brush: js;">(ctx: TimeTrackerView) =&gt; {
+    var rows = ctx.ListData.Row;
+    ctx.totalHours = 0;
+    for (var i = 0; i &lt; rows.length; i++) {
+        if (rows[i]['DurationInHours.']) {
+            ctx.totalHours += parseFloat(rows[i]['DurationInHours.']);
+        } else {
+            ctx.openLogItem = rows[i]['ID'];
+        }
+    }
+    ctx.buttonText = checkInOut(Boolean(ctx.openLogItem));
+    ctx.spanId = ctx.wpq + '_totalHours';
+    ctx.buttonId = ctx.wpq + '_button';
+}
+</pre>
+<p>Переменная <em>ctx.wpq</em> имеет уникальное значение для каждого представления на странице и отлично подходит для формирования <em>id</em> для элементов.</p>
+<p>Обращение к полю 'DurationInHours.' (с точкой в конце) это не опечатка. SharePoint генерирует два поля – одно без точки, форматированное с учетом локали сервера (для вывода), а второе с точкой, не форматированное. Такое происходит для многих полей, надо смотреть в отладчике что отдаёт SharePoint.</p>
+<p>Сама функция создания разметки выглядит так:</p><pre class="brush: js;">function renderTemplate(ctx: TimeTrackerView): string {
+    var result: string[] = [];
+    result.push('&lt;div&gt;');
+    result.push(String.format('&lt;p&gt;Total hours submitted &lt;span id="{0}" &gt;{1}&lt;/span&gt;&lt;/p&gt;', ctx.spanId, ctx.totalHours.toPrecision(2)));
+    result.push(String.format('&lt;button id="{0}" disabled="disabled"&gt;{1}&lt;/button&gt;', ctx.buttonId, ctx.buttonText));
+    result.push('&lt;/div&gt;');
+    return result.join('');
+}
+</pre>
+<p>Передача данных через контекст рендеринга – рекомендуемый способ при создании сложных шаблонов.</p>
+<p>Простая функция выбора текста кнопки:</p><pre class="brush: js;">function checkInOut(checkedIn: boolean): string {
+    return checkedIn ? 'Check-Out' : 'Check-In';
+}
+</pre>
+<h4>&nbsp;</h4>
+<h4>Логика интерфейса</h4>
+<p>При использовании client-side rendering только в onPostRender появляется возможность получить dom элементы, но это происходит до события загрузки страницы и до загрузки асинхронных скриптов, поэтому очень важно пользоваться механизмами Script On Demand, о <a href="http://gandjustas.blogspot.com/2013/07/sharepoint-script-on-demand.html" target="_blank">которых я писал недавно</a>.</p><pre class="brush: js;">SP.SOD.executeFunc('sp.js', 'SP.CleintContext', () =&gt; {
+    var button = $get(ctx.buttonId);
+    var span = $get(ctx.spanId);
+    var totalHours = ctx.totalHours;
+
+    var context = SP.ClientContext.get_current();
+    var web = context.get_web();
+    var list = web.get_lists().getById(ctx.listName);
+    var currentItem: SP.ListItem;
+
+    if (ctx.openLogItem) {
+        currentItem = list.getItemById(ctx.openLogItem);
+        context.load(currentItem);
+
+        executeQuery(() =&gt; { button.disabled = false; });
+    } else {
+        button.disabled = false;
+    }
+    //...
+})
+</pre>
+<p>Этот код инициализирует переменные для работы интерфейса, если есть открытый интервал, то он загружается с сервера и только после этого кнопка становится активной.</p>
+<p>Функция <em>executeQuery</em>:</p><pre class="brush: js;">function executeQuery(callback: () =&gt; void) {
+    context.executeQueryAsync(
+        () =&gt; {
+            callback();
+        },
+        (sender, args) =&gt; {
+            alert(args.get_message());
+            SP.Utilities.Utility.logCustomAppError(context,
+                args.get_message() + '\n' + args.get_stackTrace());
+            context.executeQueryAsync();
+        });
+}
+</pre>
+<p>В случае ошибки сообщение попадает в ULS и лог ошибок приложения.</p>
+<p>Обработчик события нажатия кнопки (используя <em><a href="http://gandjustas.blogspot.com/2013/07/mquery-sharepoint-2013.html" target="_blank">mQuery</a></em>):</p><pre class="brush: js;">SP.SOD.executeFunc('mQuery.js', 'm$', () =&gt; {
+    m$(button).click(e =&gt; {
+        button.disabled = true;
+
+        if (currentItem) {
+            checkOut(updateView);
+        } else {
+            checkIn(updateView);
+        }
+        e.preventDefault();
+    });
+});
+</pre>
+<p>Функция <em>updateView</em>, обновляет представление:</p><pre class="brush: js;">function updateView() {
+    button.disabled = false;
+    button.innerHTML = checkInOut(Boolean(currentItem));
+    span.innerHTML = totalHours.toPrecision(2);
+};</pre>
+<p>Функции <em>checkIn</em> и <em>checkOut</em>, которые реализуют логику создания нового элемента в списке и “закрытие” существующего, <em>&nbsp;</em>мало изменились с прошлого раза:</p><pre class="brush: js;">function checkOut(complete: () =&gt; void) {
+    var startedDate = &lt;Date&gt;currentItem.get_item('StartDate');
+    var dateCompleted = new Date();
+    var hours = (dateCompleted.getTime() - startedDate.getTime()) / (1000 * 60 * 60);
+
+    currentItem.set_item('DateCompleted', dateCompleted);
+    currentItem.set_item('DurationInHours', hours);
+    currentItem.update();
+
+    SPAnimationUtility.BasicAnimator.FadeOut(span);
+
+    executeQuery(() =&gt; {
+        currentItem = null;
+        totalHours += hours;
+        SPAnimationUtility.BasicAnimator.FadeIn(span);
+        complete();
+    });
+}
+
+function checkIn(complete: () =&gt; void) {
+    var item = list.addItem(new SP.ListItemCreationInformation());
+    item.set_item('StartDate', new Date());
+    item.update();
+    executeQuery(() =&gt; {
+        currentItem = item;
+        complete();
+    });
+}
+</pre>
+<h3>&nbsp;</h3>
+<h4>Добавление app part</h4>
+<p>После добавления app part в проект появляется еще одна <em>aspx</em> страница.</p>
+<p>На ней необходимо добавить разметку в <em>body</em>:<br><pre class="brush: xml;">&lt;form runat="server"&gt;
+    &lt;WebPartPages:SPWebPartManager runat="server"/&gt;
+    &lt;WebPartPages:WebPartZone runat="server" FrameType="None" ID="full"&gt;
+    &lt;/WebPartPages:WebPartZone&gt;
+&lt;/form&gt;
+</pre></p>
+<p>Чтобы заработали все скрипты необходимо в <em>head</em> добавить элемент:</p><pre class="brush: xml;">&lt;SharePoint:ScriptLink runat="server"/&gt;
+</pre>
+<p>После этого в <em>elements.xml</em> надо добавить строчки, как и для главной страницы:</p><pre class="brush: xml;">&lt;File Path="Pages\CheckInOutWebPart.aspx" Url="Pages/CheckInOutWebPart.aspx" ReplaceContent="TRUE" &gt;
+  &lt;View BaseViewID="2" List="Log" WebPartZoneID="full"  /&gt;
+&lt;/File&gt;
+</pre>
+
+<h3>Заключение</h3>
+<p>Обязательно скачайте код по ссылке - <a title="TimeTrackerApp v0.9" href="https://sptypescript.codeplex.com/downloads/get/716915" target="_blank">TimeTrackerApp v0.9</a>, пишите на TypeScript, используйте наши дефинишены (<a title="https://sptypescript.codeplex.com/" href="https://sptypescript.codeplex.com/" target="_blank">https://sptypescript.codeplex.com/</a>).</p>  

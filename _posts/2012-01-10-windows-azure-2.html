@@ -1,0 +1,134 @@
+---
+layout: post
+title: "Оптимизация процессинга в Windows Azure. Часть 2."
+date: '2012-01-10T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- Reactive Extensions
+- Azure
+modified_time: '2012-01-10T10:00:04.792+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1547841525800103181
+blogger_orig_url: http://blog.gandjustas.ru/2012/01/windows-azure-2.html
+---
+
+<p><a href="http://gandjustas.blogspot.com/2012/01/windows-azure-1.html" target="_blank">В первой части</a> я показал сколько стоит использование воркер-ролей и очередей в Windows Azure и что с этим можно сделать. </p>  <p>Довольной хороший подход – адаптировать интервал опроса новых сообщений и отключать опрос в случае их отсутствия продолжительное время. Но после выключения надо как-то включать.</p>  <p>Для этого был создан extension-метод: </p>  <pre class="brush: csharp;">public static IObservable&lt;CloudQueueMessage&gt; ToObservable&lt;T&gt;(
+                                                        this CloudQueue queue, 
+                                                        IObservable&lt;T&gt; haveMoreMessages)</pre>
+
+<p>Этот метод возвращает сообщения очереди в виде IObservable коллекции. Включение опроса осуществляется появлением элемента в последовательности haveMoreMessages.</p>
+
+<p>Теперь о том как реализовать последовательность haveMoreMessages.</p>
+
+<p>Самый дешевый вариант взаимодействия между экземплярами ролей это internal wcf communication. Для того чтобы работать с WCF необходимо определить контракты.</p>
+
+<pre class="brush: csharp;">[ServiceContract]
+public interface IQueueNotifier
+{
+    [OperationContract(IsOneWay = true)]
+    void MessageAdded(string queueName);
+
+    [OperationContract(IsOneWay = true)]
+    void NoMoreMessages(string queueName);
+}</pre>
+
+<p>Контракт содержит всего два метода оповещения о новом сообщении в очереди и об окончании сообщений. </p>
+
+<p>Реализация тоже тривиальна:</p>
+
+<pre class="brush: csharp;">public class QueueNotifier : IQueueNotifier
+{
+    private ISubject&lt;string&gt; moreMessages = new Subject&lt;string&gt;();
+    private ISubject&lt;string&gt; queueCompleted = new Subject&lt;string&gt;();
+
+    public IObservable&lt;string&gt; MoreMessages
+    {
+        get
+        {
+            return this.moreMessages;
+        }
+    }
+
+    public IObservable&lt;string&gt; QueueCompleted
+    {
+        get
+        {
+            return this.queueCompleted;
+        }
+    }
+
+    public void MessageAdded(string queueName)
+    {
+        moreMessages.OnNext(queueName);
+    }
+
+    public void NoMoreMessages(string queueName)
+    {
+        queueCompleted.OnNext(queueName);
+    }
+}</pre>
+
+<p>Далее комбинируя два потока получаем IObservable&lt;Unit&gt; пригодный для метода, описанного в начале поста.</p>
+
+<pre class="brush: csharp;">public static IObservable&lt;Unit&gt; GetQueueNotifications(this QueueNotifier service, string queueName)
+{
+    return Observable.Create&lt;Unit&gt;(obs =&gt;
+    {
+        var sub1 = service.MoreMessages
+                          .Where(q =&gt; q == queueName)
+                          .Subscribe(q =&gt; obs.OnNext(Unit.Default));
+
+        var sub2 = service.QueueCompleted
+                          .Where(q =&gt; q == queueName)
+                          .Subscribe(q =&gt; obs.OnCompleted());
+
+        return new CompositeDisposable(sub1, sub2);
+    });
+}</pre>
+
+<p>Теперь захостив QueueNotifier в воркере можно передавать ему оповещения из других ролей.</p>
+
+<h4>Клиентская сторона</h4>
+
+<p>Чтобы отправлять оповещения нужно создать ChannelFactory&lt;IQueueNotifier&gt; и получить экземпляр прокси на клиенте.</p>
+
+<p>Далее надо получить IObserver:</p>
+
+<pre class="brush: csharp;">public static IObserver&lt;Unit&gt; CreateQueueNotifierObserver(this IQueueNotifier proxy, string queueName)
+{
+    return Observer.Create&lt;Unit&gt;(
+                _ =&gt; proxy.MessageAdded(queueName),
+                _ =&gt; proxy.NoMoreMessages(queueName),
+                () =&gt; proxy.NoMoreMessages(queueName)
+            );
+}</pre>
+
+<p>Надо помнить что экземпляров воркера может быть много и у вас получится по одному <em>наблюдателю</em> на каждый инстанс воркера. При этом не надо передавать оповещение каждому воркеру, достаточно передать оповещение одному (случайному). В случае высокой нагрузки оповещения будут распределяться равномерно межу воркерами и никто их них не будет “спать”. В случае низкой нагрузки просыпаться будет только один воркер, экономя деньги.</p>
+
+<pre class="brush: csharp;">public static IObserver&lt;Unit&gt; CombineObservers(List&lt;IObserver&lt;Unit&gt;&gt; notifiers)
+{
+    var rnd = new Random();
+
+    return Observer.Create&lt;Unit&gt;(
+            u =&gt; notifiers[rnd.Next(notifiers.Count)].OnNext(u),
+            e =&gt; notifiers.ForEach(obs =&gt; obs.OnError(e)),
+            () =&gt; notifiers.ForEach(obs =&gt; obs.OnCompleted())
+        );
+}</pre>
+
+<p>Обратите внимание что OnCompleted рассылается всем воркерам, чтобы можно было остановить обработку сообщений.</p>
+
+<p>Остается только скомбинировать отправку сообщения в очередь с отправкой оповещения.</p>
+
+<pre class="brush: csharp;">public static IObserver&lt;CloudQueueMessage&gt; ToObserver(this CloudQueue queue, IObserver&lt;Unit&gt; notifier)
+{
+    var addMessage = Observable.FromAsyncPattern&lt;CloudQueueMessage&gt;(queue.BeginAddMessage, queue.EndAddMessage);
+
+    return Observer.Create&lt;CloudQueueMessage&gt;(
+            m =&gt; addMessage(m).Subscribe(notifier.OnNext, notifier.OnError),
+            notifier.OnError,
+            notifier.OnCompleted);
+}</pre>
+
+<p>Таким образом получается достигнуть того что воркеры не обращаются постоянно к Azure Storage, экономя деньги и ресурсы виртуальных машин. При этом мы получили на клиенте и сервере очень простые интерфейсы, позволяющие тем не менее выполнять сложные действия&#160; с ними.</p>
+
+<p>В следующей части дальнейшая оптимизация, библиотека и пример приложения.</p>  

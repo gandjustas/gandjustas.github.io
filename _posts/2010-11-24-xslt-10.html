@@ -1,0 +1,26 @@
+---
+layout: post
+title: "Группировка элементов в XSLT 1.0"
+date: '2010-11-24T12:18:00.001+03:00'
+author: "Станислав Выщепан"
+tags:
+- XSLT
+- SharePoint
+modified_time: '2010-11-24T12:18:06.748+03:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-5353668250697766100
+blogger_orig_url: http://blog.gandjustas.ru/2010/11/xslt-10.html
+---
+
+<p>По счастливой случайности я активно занимаюсь разработкой на SharePoint 2010. Для отображения данных в нем использует XSTL 1.0 в котором отсутствует оператор for-each-group. Вот чтобы сделать группировку надо написать такой код:</p>  <pre class="brush: xml;">&lt;xsl:stylesheet  version=&quot;1.0&quot; xmlns:xsl=&quot;http://www.w3.org/1999/XSL/Transform&quot;&gt; 
+    &lt;xsl:key name=&quot;имя-индекса&quot; match=&quot;элементы-для-друппировки&quot; use=&quot;ключ-для-группировки&quot; /&gt;
+    &lt;xsl:template&gt;
+        &lt;xsl:for-each 
+            select=&quot;элементы-для-друппировки[count(. | key('имя-индекса', ключ-для-группировки)[1]) = 1]&quot;&gt;
+            &lt;!--преобразование для группы--&gt;
+         &lt;xsl:for-each select=&quot;key('имя-индекса', ключ-для-группировки)&quot;&gt;
+                &lt;!--преобразование для элементов группы--&gt;
+         &lt;/xsl:for-each&gt;
+            &lt;!--преобразование для группы--&gt;
+        &lt;/xsl:for-each&gt;        
+    &lt;/xsl:template&gt;    
+&lt;/xsl:stylesheet&gt;</pre>  

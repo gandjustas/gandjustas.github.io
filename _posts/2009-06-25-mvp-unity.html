@@ -1,0 +1,129 @@
+---
+layout: post
+title: "Паттерн MVP и Unity"
+date: '2009-06-25T21:08:00.001+04:00'
+author: "Станислав Выщепан"
+tags:
+- MVP
+- Unity
+- ".NET"
+- WinForms
+- IoC-контейнер
+modified_time: '2009-06-25T22:25:37.011+04:00'
+thumbnail: http://lh5.ggpht.com/_nlXJqAOzvQI/SkOvKXQMphI/AAAAAAAAABM/G4r4opRjWAQ/s72-c/Form1_thumb.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-4528243353903761752
+blogger_orig_url: http://blog.gandjustas.ru/2009/06/mvp-unity.html
+---
+
+<p>MVP – Model View Presenter – паттерн организации PL (<strong>presentation layer</strong> – уровень представления). </p>  <p>MVP применяется при создании десктопных интерфейсов. Выделяют три комопнента: есть <strong>модель</strong> – группа классов, которые отдают данные или получают команды, <strong>представление</strong> – форма обладающая состоянием и некоторым поведением. <strong>Презентер</strong> создают для отделения бизнес-логики от деталей GUI-фреймворка. В отличие от MVC в MVP представление определяет презентер, а не наоборот.</p>  <p>MVP обычно строится вокруг существующих GUI-фреймворков. На практике существуют две принципиально различные различные реализации паттерна – <a href="http://martinfowler.com/eaaDev/SupervisingPresenter.html" target="_blank">Supervising Controller</a> и <a href="http://martinfowler.com/eaaDev/PassiveScreen.html" target="_blank">Passive View</a>.     <br />В первом случае логика помещается в обработчики событий button_click, а сами обработчики помещаются в отдельный класс. Для полной изоляции презентера от деталей представления надо писать достаточно много врапперов\адаптеров.     <br />Во втором случае создается пара интерфейсов для общения между представлением и презентером. При совершении какого-либо действия представление напрямую обращается к презентеру, тот выполняет некоторый код и вызывает установку свойств представления. Passive View способствует максимальному перемещению кода в в презентер, что облегчает тестирование.</p>  <h4>Создание MVP в WinForms с помощью Unity.</h4>  <p>Создаем новое winforms приложение и грохаем оттуда форму.</p>  <p>Для начала определим служебные интерфейсы.</p>  <pre class="c-sharp" name="code">//Маркерный интерфейс представления
+public interface IView
+{
+}
+
+//Интрефейс презентера
+public interface IPresenter&lt;T&gt; where T:IView
+{
+    T View { get; set; }
+}
+
+//Базовый класс для презентера
+public abstract class BasePresenter&lt;T&gt; :IPresenter&lt;T&gt; where T:IView
+{
+    public T View { get; set; }
+}</pre>
+
+<p>Класс “бизнес-логики” будем использовать тот же, что и в <a href="http://gandjustas.blogspot.com/2009/06/unity-aspnet-mvc.html" target="_blank">предыдущем посте</a>.</p>
+
+<pre class="c-sharp" name="code">public interface ISayHelloService
+{
+    string SayHello(string name);
+}
+ 
+public class SayHelloSerivce : ISayHelloService
+{
+    public string SayHello(string name)
+    {
+        return &quot;Привет, &quot; + name;
+    }
+}</pre>
+
+<p>Теперь определим рабочие интерфейсы.</p>
+
+<pre class="c-sharp" name="code">public interface ISayHelloPresenter : IPresenter&lt;ISayHelloView&gt;
+{
+    void SayHello();
+}
+
+public interface ISayHelloView: IView
+{
+    string GetInputText();
+    void SetOutputText(string text);
+}</pre>
+Для перезнтера код будет тривиальный. 
+
+<pre class="c-sharp" name="code">public class SayHelloPresenter : BasePresenter&lt;ISayHelloView&gt;, ISayHelloPresenter
+{
+    ISayHelloService _service;
+
+    public SayHelloPresenter(ISayHelloService service)
+    {
+        this._service = service;
+    }
+
+    public void SayHello()
+    {
+        this.View.SetOutputText(_service.SayHello(this.View.GetInputText()));
+    }
+}</pre>
+Теперь нарисуем простую формочку: 
+
+<p><a href="http://lh3.ggpht.com/_nlXJqAOzvQI/SkOvJHoP_GI/AAAAAAAAABE/MAFgScaqqLs/s1600-h/Form1%5B2%5D.png"><img style="border-right-width: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px" title="Form1" border="0" alt="Form1" src="http://lh5.ggpht.com/_nlXJqAOzvQI/SkOvKXQMphI/AAAAAAAAABM/G4r4opRjWAQ/Form1_thumb.png?imgmax=800" width="226" height="140" /></a> </p>
+
+<p>В коде напишем следеющее:</p>
+
+<pre class="c-sharp" name="code">public partial class Form1 : Form, ISayHelloView
+{
+    ISayHelloPresenter _presenter;
+
+    public Form1(ISayHelloPresenter presenter)
+    {
+        InitializeComponent();
+        _presenter = presenter;
+        //Циклическая зависимость
+        _presenter.View = this; 
+    }
+
+    public string GetInputText()
+    {
+        return textBox1.Text;
+    }
+
+    public void SetOutputText(string text)
+    {
+        textBox2.Text = text;
+    }
+
+    private void button1_Click(object sender, EventArgs e)
+    {
+        _presenter.SayHello();
+    }
+}</pre>
+
+<p>Циклическая зависимость в Passive View не позволяет с помощью контейнера пропихнуть все зависимости. Поэтому передача презентеру ссылки на представление делается в коде view.</p>
+
+<p>Теперь чтобы увязать это вместе надо создать и сконфигурировать контейнер. Сделаем это прямо в Program.cs.</p>
+
+<pre class="c-sharp" name="code">static void Main()
+{
+    var container = new UnityContainer();
+    container
+        .RegisterType&lt;ISayHelloService, SayHelloSerivce&gt;()
+        .RegisterType&lt;ISayHelloPresenter, SayHelloPresenter&gt;()
+        .RegisterType&lt;ISayHelloView, Form1&gt;()
+        ;
+    Application.EnableVisualStyles();
+    Application.SetCompatibleTextRenderingDefault(false);
+    Application.Run((Form)container.Resolve&lt;ISayHelloView&gt;());
+}</pre>
+
+<p>Вот и все.</p>  

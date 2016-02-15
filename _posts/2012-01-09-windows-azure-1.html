@@ -1,0 +1,185 @@
+---
+layout: post
+title: "Оптимизация процессинга в Windows Azure. Часть 1."
+date: '2012-01-09T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- Reactive Extensions
+- Azure
+modified_time: '2012-01-09T10:00:03.547+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-453820792260546635
+blogger_orig_url: http://blog.gandjustas.ru/2012/01/windows-azure-1.html
+---
+
+<p>Для тех кто не в курсе: Windows Azure – “облачная” платформа Microsoft. Создавая приложения, работающие “в облаке”, у вас есть возможность разделять систему на “роли”. Бывают веб-роли, которые представляют из себя обычные веб-приложения,&#160; бывают также worker-роли (далее <em>воркеры</em>), предназначенные для вычислений. </p>  <p>Для увеличения масштабируемости приложения используется очереди. Сообщения в очередях обрабатываются воркерами, а ставят сообщения чаще всего веб-роли или другие воркеры. Таким образом можно разбить какие-либо длительные операции на небольшие и обрабатывать их асинхронно на любом количестве узлов, так как очереди в Windows Azure специально проектировали для сценария множественных потребителей.</p>  <p>Типовой код для воркера Windows Azure на C# такой:</p>  <pre class="brush: csharp;">while (true)
+{
+    var msg = queue.GetMessage();
+    if (msg != null)
+    {
+        //do some work
+        queue.DeleteMessage(msg);
+    }
+    else
+    {
+        Thread.Sleep(10000);
+    }
+
+    Trace.WriteLine(&quot;Working&quot;, &quot;Information&quot;);
+}</pre>
+
+<p>Как вы думаете сколько стоит этот воркер. В смысле реальных денег потребляемых таким приложением, развернутым на Windows Azure.</p>
+
+<p>Для этого надо посмотреть цены: <a href="https://www.windowsazure.com/en-us/pricing/details/">https://www.windowsazure.com/en-us/pricing/details/</a>.</p>
+
+<p>Если задеплоить такую роль в одном small экземпляре, то получится $2,88 в день/$86,4 в месяц/~2600 рублей в месяц. Так? А вот и нет…</p>
+
+<p>Есть еще “скрытая” стоимость такой архитектуры, заключается она в том что транзакции к хранилищу тоже оплачиваются <a href="https://www.windowsazure.com/en-us/pricing/details/#storage">https://www.windowsazure.com/en-us/pricing/details/#storage</a>. Всего&#160; $0.01 за 10,000 транзакций. Каждая транзакция – это один запрос к azure storage. </p>
+
+<p>Код выше выполняет один запрос каждые 10 секунд даже если нету никаких сообщений в очереди. 
+  <br />Стоимость такого кода получается 60*60*24*30/(10 * 1000) = $25,92 в месяц. вместе со стоимостью compute hours это выходит <strong>$112,32 в месяц</strong>. <strong>И это даже если код не выполняет никакой работы!</strong></p>
+
+<p>Кроме того SLA гарантирует работоспособность роли 99,95% только при наличии минимум двух инстансов, так что для устойчивости надо еще умножить цену на 2. <strong>Итого $250 в месяц</strong>.</p>
+
+<h4>Вывод</h4>
+
+<p>Архитектура, которую предлагает Microsoft для масштабирования довольно дорого стоит. Используйте код из примеров очень осторожно, он может увести ваш проект в большой минус.</p>
+
+<h4>Что делать?</h4>
+
+<p>Вариант первый – использовать <a href="https://www.windowsazure.com/en-us/home/tour/service-bus/" target="_blank">service bus</a>, в нем тоже есть очереди, но API позволяет в одной транзакции ожидать сообщения, а не сразу null возвращать при его отсутствии. </p>
+
+<p>Вариант второй – использовать адаптивную подстройку интервала опроса очереди и выключать опрос в случае отсутствия сообщений. </p>
+
+<p>Второй вариант кажется хорошей идеей так как позволяет масштабировать подход как “вниз”, так и “вверх”. Но тут возникает вопрос, а если мы прекратим прием сообщений, то как его потом возобновить? Видимо надо передать сообщение… Приходим снова к той же проблеме. </p>
+
+<p>Но сигнал к “пробуждению” читателя сообщений можно передавать по более дешевому каналу, например через wcf internal endpoint.</p>
+
+<h4>Реализация</h4>
+
+<p>Чтобы абстрагироваться от всех деталей с сообщениями, таймаутами и каналами удобно использовать библиотеку Rx. Я использую Experimental версию так как в ней собрано много нужных комбинаторов.</p>
+
+<p>Для начала надо вписать код в концепцию Rx. Длительные операции, вроде вызовов методов Cloud Storage и тайматуов сделать в виде IObservable.</p>
+
+<pre class="brush: csharp;">public static IObservable&lt;CloudQueueMessage&gt; ObserveMessages(this CloudQueue queue)
+{
+    return Observable.Create&lt;CloudQueueMessage&gt;(obs =&gt; Iterator(obs, queue));
+}
+
+private static IEnumerable&lt;IObservable&lt;object&gt;&gt; Iterator(
+                                                    IObserver&lt;CloudQueueMessage&gt; result, 
+                                                    CloudQueue queue)
+{
+    //Observable queue.GetMessage
+    var getMessage = Observable.FromAsyncPattern&lt;CloudQueueMessage&gt;(
+                                        queue.BeginGetMessage,
+                                        queue.EndGetMessage);
+    //Observable queue.DeleteMessage
+    var deleteMessage = Observable.FromAsyncPattern&lt;CloudQueueMessage&gt;(
+                                        queue.BeginDeleteMessage,
+                                        queue.EndDeleteMessage);
+
+    while (true)
+    {
+        //var msg = queue.GetMessage();               
+        var msgObs = getMessage().ToListObservable();
+        yield return msgObs;
+        var msg = msgObs[0];
+
+        if (msg != null)
+        {
+            //do some work
+            result.OnNext(msg);
+
+            //queue.DeleteMessage(msg);                     
+            yield return deleteMessage(msg).ToListObservable();
+        }
+        else
+        {
+            //Thread.Sleep(10000);
+            //Same pattern as above
+            yield return Observable.Timer(TimeSpan.FromSeconds(10))
+                                   .ToListObservable();
+        }
+
+        Trace.WriteLine(&quot;Working&quot;, &quot;Information&quot;);
+    }
+}</pre>
+
+<p>Теперь надо немного изменить код, сделав таймаут адаптивным.</p>
+
+<p>Функция вычисления таймаута:</p>
+
+<pre class="brush: csharp; collapse: true;">private static TimeSpan CalulateDelay(int idleCount, int minimumIdleIntervalMs,  int maximumIdleIntervalMs, int deltaBackoffMs)
+{
+    // Calculate a new sleep interval value that will follow a random exponential back-off curve.
+    int delta = (int)((Math.Pow(2.0, (double)idleCount) - 1.0) * (new Random()).Next((int)(deltaBackoffMs * 0.8), (int)(deltaBackoffMs * 1.2)));
+    int interval = Math.Min(minimumIdleIntervalMs + delta, maximumIdleIntervalMs);
+
+    // Pass the calculated interval to the dequeue task to enable it to enter into a sleep state for the specified duration.
+    return TimeSpan.FromMilliseconds((double)interval);            
+}</pre>
+
+<p>Честно украдена <a href="http://msdn.microsoft.com/en-us/library/windowsazure/hh697709(v=vs.103).aspx" target="_blank">отсюда</a>.</p>
+
+<p>Сам код воркера:</p>
+
+<pre class="brush: csharp; collapse: true;">var idleCount = 0;
+while (true)
+{
+    var msgObs = getMessage().ToListObservable();
+    yield return msgObs;
+    var msg = msgObs[0];
+
+    if (msg != null)
+    {
+        idleCount = 0;
+
+        //do some work
+        result.OnNext(msg);
+
+        yield return deleteMessage(msg).ToListObservable();
+    }
+    else
+    {
+        var delay = 
+                CalulateDelay(idleCount++, 
+                              MinimumIdleIntervalMs, 
+                              MaximumIdleIntervalMs, 
+                              100);
+        if (delay.TotalMilliseconds &gt;= MaximumIdleIntervalMs)
+        {
+            yield break;
+        }
+
+        yield return Observable.Timer(delay).ToListObservable();
+    }
+}</pre>
+
+<p>Выключать цикл опроса сообщений мы научились, теперь попробуем научиться его включать. Будем считать что “внешний раздражитель”, который будет будить цикл выборки сообщений, выглядит как IObservable&lt;T&gt;.</p>
+
+<pre class="brush: csharp;">public static IObservable&lt;CloudQueueMessage&gt; ObserveMessages&lt;T&gt;(
+                                                this CloudQueue queue, 
+                                                IObservable&lt;T&gt; haveMoreMessages)
+{
+    var iterator = Observable.Create&lt;CloudQueueMessage&gt;(
+                                  obs =&gt; Iterator(obs, queue));
+    IDisposable subscription = null;
+
+    return Observable.Create&lt;CloudQueueMessage&gt;(
+        obs =&gt; haveMoreMessages.Subscribe(
+            _ =&gt;
+            {
+                if (subscription == null)
+                {
+                    subscription = iterator.Subscribe(
+                                                obs.OnNext, 
+                                                obs.OnError, 
+                                                () =&gt; subscription = null);
+                }
+            }, 
+            () =&gt; subscription.Dispose() ));
+}</pre>
+
+<p>Код получился запутанный, но при некоторой сноровке читается очень хорошо.</p>
+
+<p>На сегодня все. В следующей части я расскажу как сделать&#160; пробуждение воркеров по сигналу и какими еще способами можно оптимизировать стоимость решения для Windows Azure.</p>  

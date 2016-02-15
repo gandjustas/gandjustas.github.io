@@ -1,0 +1,155 @@
+---
+layout: post
+title: "Поиск в приложениях SharePoint. Часть 2."
+date: '2014-01-27T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- DataFormWebPart
+- XSLT
+- SharePoint Designer
+- "код"
+- DataSource
+- "поиск"
+- "разработка"
+- SharePoint
+modified_time: '2014-01-27T10:00:00.392+04:00'
+thumbnail: http://lh4.ggpht.com/-SUARE36vAMc/UuWckHRSDMI/AAAAAAAAAb8/2tekDQj1Vrc/s72-c/Untitled%25255B10%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-4356384825942453094
+blogger_orig_url: http://blog.gandjustas.ru/2014/01/sharepoint-search-in-solutions-part-2.html
+---
+
+<p><a href="http://gandjustas.blogspot.com/2012/03/sharepoint-1.html" target="_blank"><img title="Untitled" style="border-top: 0px; border-right: 0px; background-image: none; border-bottom: 0px; padding-top: 0px; padding-left: 0px; border-left: 0px; display: inline; padding-right: 0px" border="0" alt="Untitled" src="http://lh4.ggpht.com/-SUARE36vAMc/UuWckHRSDMI/AAAAAAAAAb8/2tekDQj1Vrc/Untitled%25255B10%25255D.png?imgmax=800" width="560" height="127"></a></p> <p>Первая часть этой серии была написана примерно полтора года назад, после этого появился SharePoint 2013, в котором добавили очень много возможностей для использовании поиска в решениях. Но недавний опрос в сообществе (<a title="https://www.facebook.com/groups/sharepointrussian/permalink/514677285314072/?stream_ref=2" href="https://www.facebook.com/groups/sharepointrussian/permalink/514677285314072/?stream_ref=2">https://www.facebook.com/groups/sharepointrussian/permalink/514677285314072/?stream_ref=2</a>) показал, что наиболее популярной версией до сих пор является SharePoint 2010.</p> <p>В первой части я рассказывал как использовать стандартные веб-части поиска в SharePoint 2010, теперь расскажу как с помощью небольшого объема кода получить максимальное мощное решение для создания порталов.</p> <h3>DataFormWebPart</h3> <p>Стандартная веб-часть SharePoint позволяет использовать различные источники данных и формировать разметку с помощью XSL. Источник данных описывается с помою класса наследника <a href="http://msdn.microsoft.com/RU-RU/library/92e191zc(v=vs.90)" target="_blank">System.Web.UI.DataSourceControl</a>. В разметке страницы или .webpart файле можно указать какой <em>DataSource</em> использовать в веб-части. </p> <h3>SearchDataource</h3> <p>Для начала создадим DataSource, который возвращает результаты поискового запроса. На MSDN есть инструкция по созданию класса DataSource - <a title="http://msdn.microsoft.com/RU-RU/library/92e191zc(v=vs.90)" href="http://msdn.microsoft.com/RU-RU/library/92e191zc(v=vs.90)">http://msdn.microsoft.com/RU-RU/library/92e191zc(v=vs.90)</a></p><pre class="brush: csharp;">public class SearchDataSource: DataSourceControl
+{
+    protected override DataSourceView GetView(string viewName)
+    {
+        return new SearchDataSourceView(this);
+    }
+
+    public string QueryText { get; set; }
+
+    public string SelectProperties { get; set; }        
+}
+</pre>Основная работа делается в классе <em>SearchDataSourceView</em>, наследнике <em>DataSourceView</em>. <pre class="brush: csharp;">class SearchDataSourceView: DataSourceView
+{
+    SearchDataSource dataSource;
+
+    public SearchDataSourceView(SearchDataSource dataSource): base(dataSource,"")
+    {
+        this.dataSource = dataSource;
+    }
+
+    public override bool CanPage
+    {
+        get
+        {
+            return true;
+        }
+    }
+
+    public override bool CanSort
+    {
+        get
+        {
+            return true;
+        }
+    }
+
+    public override bool CanRetrieveTotalRowCount
+    {
+        get
+        {
+            return true;
+        }
+    }
+
+    protected override System.Collections.IEnumerable ExecuteSelect(DataSourceSelectArguments arguments)
+    {
+        var query = GetQuery(arguments.SortExpression);
+
+        query.StartRow = arguments.StartRowIndex;
+        query.RowLimit = arguments.MaximumRows;
+
+        var results = query.Execute()[ResultType.RelevantResults];
+        arguments.TotalRowCount = results.TotalRows;
+        return results.Table.DefaultView;
+    }
+
+    private KeywordQuery GetQuery(string sortExpression)
+    {
+        /* omited for clarity */
+    }
+}
+</pre>
+<p>Основной метод класса – <em>ExecuteSelect</em>, он должен возвращать IEnumerable, поддерживающий <em>TypeDescriptor</em>,<em> </em>например DataView. Про <em>TypeDescriptors</em> я писал ранее – <a title="http://gandjustas.blogspot.ru/2011/08/blog-post_22.html" href="http://gandjustas.blogspot.ru/2011/08/blog-post_22.html">http://gandjustas.blogspot.ru/2011/08/<em>blog</em>-post_22.html</a>. Класс <em>DataSourceView</em> может поддерживать разбиение на страницы и сортировку, это определяется свойствами, которые я переопределил в начале.</p>
+<p>Код создания запроса:</p><pre class="brush: csharp;">private KeywordQuery GetQuery(string sortExpression)
+{
+    var query = new KeywordQuery(SPContext.Current.Site);
+    query.QueryText = this.dataSource.QueryText;
+    query.ResultTypes = ResultType.RelevantResults;
+
+    if (!string.IsNullOrEmpty(this.dataSource.SelectProperties))
+    {
+        query.SelectProperties.Clear();
+        foreach (var property in this.dataSource.SelectProperties.Split(','))
+        {
+            query.SelectProperties.Add(property.Trim());
+        }
+    }
+
+    if (!string.IsNullOrEmpty(sortExpression))
+    {
+        query.SortList.Clear();
+        foreach (var sort in sortExpression.Split(','))
+        {
+            if (sort.EndsWith(" DESC"))
+            {
+                query.SortList.Add(sort.Substring(0, sort.IndexOf(" DESC")), SortDirection.Descending);
+            }
+            else
+            {
+                query.SortList.Add(sort, SortDirection.Ascending);
+            }
+        }
+    }
+
+    return query;
+}
+</pre>
+<p>Этот код заполняет базовые параметры, запрашиваемые свойства и параметры сортировки.</p>
+<h3>Настройка веб-части</h3>
+<p>Добавляем веб-часть на страницу</p>
+<p><a href="http://lh5.ggpht.com/-r_g0g_h7gq8/UuWclZi-HbI/AAAAAAAAAcE/tdl_hz8ZUqk/s1600-h/image%25255B10%25255D.png"><img title="image" style="border-left-width: 0px; border-right-width: 0px; background-image: none; border-bottom-width: 0px; padding-top: 0px; padding-left: 0px; display: inline; padding-right: 0px; border-top-width: 0px" border="0" alt="image" src="http://lh4.ggpht.com/-QxiFgPRKEWA/UuWcmRpFMeI/AAAAAAAAAcM/7qKLK71POIo/image_thumb%25255B10%25255D.png?imgmax=800" width="560" height="280"></a></p>
+<p>&nbsp;</p>
+<p>Далее заменяем DataSource и вставляем identity transform</p>
+<p><a href="http://lh6.ggpht.com/-S8khulT-GIw/UuWcnMqMUUI/AAAAAAAAAcU/9wAENoAS5gU/s1600-h/image%25255B18%25255D.png"><img title="image" style="border-left-width: 0px; border-right-width: 0px; background-image: none; border-bottom-width: 0px; padding-top: 0px; padding-left: 0px; display: inline; padding-right: 0px; border-top-width: 0px" border="0" alt="image" src="http://lh6.ggpht.com/-TyA9BkCgF_k/UuWcnxORGqI/AAAAAAAAAcY/KK7j2iO2Lz4/image_thumb%25255B24%25255D.png?imgmax=800" width="560" height="131"></a></p>
+<p>Директиву Register нужно вставлять прямо в раздел DataSource. В XSL надо вставить Identity Transform, чтобы получить данные в виде XML :</p><pre class="brush: xml;">&lt;xsl:stylesheet version="1.0"  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"&gt;
+    &lt;xsl:output indent="yes"/&gt;
+    &lt;xsl:template match="/"  &gt;
+        &lt;xmp&gt;
+            &lt;xsl:copy-of select="." /&gt;
+        &lt;/xmp&gt;
+    &lt;/xsl:template&gt;
+&lt;/xsl:stylesheet&gt;
+</pre>
+<p>В результате получим такое: </p>
+<p><a href="http://lh3.ggpht.com/-FCS9gyEdQOE/UuWcogo7YtI/AAAAAAAAAck/BPR78tWbfw8/s1600-h/image%25255B27%25255D.png"><img title="image" style="border-top: 0px; border-right: 0px; background-image: none; border-bottom: 0px; padding-top: 0px; padding-left: 0px; border-left: 0px; display: inline; padding-right: 0px" border="0" alt="image" src="http://lh5.ggpht.com/-hvb2BB8t8wo/UuWcpuv9DTI/AAAAAAAAAcs/fRw8YPPdqTk/image_thumb%25255B32%25255D.png?imgmax=800" width="560" height="273"></a></p>
+<p>Далее можно скопировать полученный XML и сделать необходимый XSL в Visual Studio или в SharePoint Designer.</p>
+<p>Например так:</p>
+<p><a href="http://lh6.ggpht.com/-aGXVCVYFXdw/UuWcqZLvCYI/AAAAAAAAAcw/RU7oSURkUcs/s1600-h/image%25255B34%25255D.png"><img title="image" style="border-top: 0px; border-right: 0px; background-image: none; border-bottom: 0px; padding-top: 0px; padding-left: 0px; border-left: 0px; display: inline; padding-right: 0px" border="0" alt="image" src="http://lh4.ggpht.com/-49OJzpnN_dc/UuWcrFlOMdI/AAAAAAAAAc4/NfD0RJXZoUc/image_thumb%25255B42%25255D.png?imgmax=800" width="560" height="151"></a></p>
+<h3>Создаем пакет решения</h3>
+<p>Чтобы завернуть полученный результат в WSP надо экспортировать веб-часть с сайта. Получившийся .webpart файл включить в решение. Это все.</p>
+<p>Причем можно деплоить сборку с DataSource в farm solution, а .webpart файлы в sandbox.</p>
+<p>Для конкретных задач можно расширить функционал:</p>
+<ul>
+<li>Добавить обработку параметров DataSource. Параметры позволяют использовать значения QueryString, связи между веб-частями и другие внешние факторы. Также можно создавать свои параметры.</li>
+<li>Сделать аналогичный <em>DataSource</em> для <em>RefinementResults</em>, чтобы получать статистику. Что очень часто нужно для главной страницы порталов.</li></ul>
+<p>Если вам нужна веб-часть в одном экземпляре (что бывает чуть менее, чем всегда), то можно не париться с сохранением .webpart и ковырянием в SharePoint Designer. Достаточно просто сделать наследника <em>DataFormWebPart </em>и переопределить метод <a href="http://msdn.microsoft.com/ru-ru/library/microsoft.sharepoint.webpartpages.dataformwebpart.getdatasource.aspx" target="_blank"><em>GetDataSouce</em></a>. При этом можно также переопределить XSL, чтобы он всегда указывал на файл в виртуальной файловой системе. Это значительно облегчит сопровождение решения.</p>
+<h3>Заключение</h3>
+
+
+
+
+
+
+<p>Как обычно исходники можно найти на <a href="http://spsamples.codeplex.com">http://spsamples.codeplex.com</a>. Также сделал релиз: <a title="https://spsamples.codeplex.com/releases/view/117762" href="https://spsamples.codeplex.com/releases/view/117762">https://spsamples.codeplex.com/releases/view/117762</a>.</p>
+<p>Качайте, смотрите, изучайте, интегрируйте в свои решения.</p>  

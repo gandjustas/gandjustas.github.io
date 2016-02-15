@@ -1,0 +1,77 @@
+---
+layout: post
+title: AOP времени исполнения в Unity
+date: '2009-01-25T01:02:00.001+03:00'
+author: "Станислав Выщепан"
+tags:
+- Unity
+- ".NET"
+- AOP
+- IoC-контейнер
+modified_time: '2009-01-25T01:06:49.774+03:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1220202804511068580
+blogger_orig_url: http://blog.gandjustas.ru/2009/01/aop-unity.html
+---
+
+<p>Для тех кто не знает – AOP это Aspect-Oriented Programming, Аспектно-ориентированное программирование. </p>  <p>При написании любой программы программист производит функциональную декомпозицию, то есть разбивает большие блоки функциональности на более маленькие. Но всегда существуют так называемые cross-cutting concerns&#160; или сквозная функциональность, которая используется всеми остальными частями программы, которую невозможно выделить&#160; в отдельный модуль\класс\метод,    <br />Чаще всего такой функциональностью является логгирование, разграничение доступа, управление транзакциями.</p>  <p>Концепция AOP заключается в том что сквозная функциональность выделяется в отдельные сущности , называемые аспектами, и декларативно задается использование аспектов&#160; в коде.</p>  <p>AOP для .NET может быть реализован двумя способами: изменение кода при компиляции инструментами типа PostSharp или макросами языка Nemerle, или перехват вызовов на стадии выполнения. </p>  <p>В составе Unity есть сборка Microsoft.Practices.Unity.Interception, которая содержит расширение контейнера Unity для перехвата вызовов объектов собираемых контейнером.</p>  <p>Чтобы перехватывать вызовы надо контейнеру сообщить <em>что </em>перехватывать, <em>как </em>перехватывать, и <em>зачем</em> перехватывать.     <br /><em>Что</em> перехватывать задается политиками (Policy), <em>как</em> перехватывать определяют перехватчики (Interceptor), <em>зачем</em> перехватывать определяют обработчики вызовов (CallHandlers).     <br />Эти три части механизма перехвата не зависят друг от друга.</p>  <p>Перехватчики – это классы, реализующие интерфейс <strong>IInterceptor</strong>. В библиотеке есть классы <strong>InterfaceInterceptor</strong> для перехвата методов интерфейса, <strong>VirtualMethodInterceptor </strong>– для перехвата виртуальных методов класса, <strong>TransparentProxyInterceptor</strong> – для перехвата с помощью прокси-классов, используемых для .NET Remoting. </p>  <p>Обработчики вызовов – это классы, которые реализуют интерфейс <strong>ICallHandler</strong>, в котором только один нужный метод – Invoke.</p>  <p>Политики бывают двух видов – управляемая атрибутами (<strong>AttributeDrivenPolicy</strong>) и управляемая правилами (<strong>RuleDrivenPolicy</strong>).     <br />По-умолчанию используется AttributeDrivenPolicy, которая заключается в том что обработчики вызовов задаются атрибутами, унаследованными от <strong>HandlerAttribute</strong>, и перехватываются только те методы, для которых заданы эти атрибуты (или атрибуты заданы для классов).     <br />RuleDrivenPolicy позволяет задавать какие методы будут перехватываться с помощью набора правил (<strong>IMatchingRule</strong>)&#160; и какие обработчики будут при этом вызываться.</p>  <p>Подробнее по этой ссылке <a title="http://msdn.microsoft.com/en-us/library/dd140045.aspx" href="http://msdn.microsoft.com/en-us/library/dd140045.aspx">http://msdn.microsoft.com/en-us/library/dd140045.aspx</a></p>  <p>Если вы сами пишете код, для которого нужен перехват, то атрибутов и стандартной политики вам будет достаточно. Если вы не можете менять код классов, но хотите их перехватывать, то это можно сделать с помощью задания политик, основанных на правилах заданных в коде или конфигурационном файле.</p>  <h4>Пример</h4>  <p>Сначала создадим обработчик, который просто выводит Hello, world на консоль</p>  <pre class="c-sharp" name="code">public sealed class HelloWorldAttribute : HandlerAttribute
+{
+    public override ICallHandler CreateHandler(IUnityContainer container)
+    {
+        return new HelloWorldCallHandler();
+    }
+}
+
+public class HelloWorldCallHandler: ICallHandler
+{
+    public IMethodReturn Invoke(IMethodInvocation input, GetNextHandlerDelegate getNext)
+    {
+        Console.WriteLine(&quot;Hello, world&quot;);
+        return getNext()(input, getNext);
+    }
+
+    public int Order { get; set; }
+}</pre>
+
+<p>Теперь создадим класс, унаследованный от <strong>MarshalByRefObject</strong>, чтобы его можно было перехватывать с помощью <strong>TransparentProxyInterceptor</strong>. Атрибут HelloWorld объявлен выше.</p>
+
+<pre class="c-sharp" name="code">[HelloWorld]
+public class SomeService1: MarshalByRefObject
+{
+    public void Method1()
+    {
+        Console.WriteLine(&quot;SomeService1.Method1&quot;);
+    }
+}</pre>
+
+<p>В Main напишем код</p>
+
+<pre class="c-sharp" name="code">container
+    .AddNewExtension&lt;Interception&gt;()
+    .Configure&lt;Interception&gt;()
+        .SetDefaultInterceptorFor&lt;SomeService1&gt;(new TransparentProxyInterceptor());
+
+var s = container.Resolve&lt;SomeService1&gt;();
+s.Method1();
+Console.ReadLine();</pre>
+
+<p>При выполнении будет выведено </p>
+
+<pre>Hello, world
+SomeService1.Method1</pre>
+
+<p>Предположим что SomeService1 нам недоступен и уберем атрибут HelloWorld. Чтобы получить такую же функциональность программы надо дописать несколько строк кода</p>
+
+<pre class="c-sharp" name="code">container
+    .AddNewExtension&lt;Interception&gt;()
+    .Configure&lt;Interception&gt;()
+        .SetDefaultInterceptorFor&lt;SomeService1&gt;(new TransparentProxyInterceptor())
+            .AddPolicy(&quot;Policy&quot;)
+                .AddMatchingRule(new TypeMatchingRule(typeof(SomeService1)))
+                .AddCallHandler&lt;HelloWorldCallHandler&gt;();
+
+var s = container.Resolve&lt;SomeService1&gt;();
+s.Method1();
+Console.ReadLine();</pre>
+Аналогичные настройки можно задать в конфигурационном файле. 
+
+  

@@ -1,0 +1,95 @@
+---
+layout: post
+title: "Оптимизация процессинга в Windows Azure. Часть 3."
+date: '2012-01-11T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- Reactive Extensions
+- Azure
+modified_time: '2012-01-11T10:00:06.296+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-8111188180151488846
+blogger_orig_url: http://blog.gandjustas.ru/2012/01/windows-azure-3.html
+---
+
+<p><a href="http://gandjustas.blogspot.com/2012/01/windows-azure-2.html" target="_blank">В предыдущем посте</a> я описал подход, позволяющий существенно сократить количество вызовов к azure storage, который может сэкономить много денег. Но тем не менее ваши воркеры продолжают поедать ваши деньги.</p>  <h4>А нужны ли вообще воркеры?</h4>  <p>Оказывается<em> не нужны</em>. Если у вас небольшое приложение и вы используете очереди для надежной (reliable) асинхронной обработки, причем сама обработка не требует больших вычислительных затрат, то вам и не нужны воркеры. Можете использовать пару методов ToObserver\ToObservable из предыдущего поста, а для оповещений обычный Subject&lt;Unit&gt;. </p>  <p>Отказываться&#160; от очередей в данном случае не надо, так как при масштабировании работу подхватят воркеры.</p>  <h4>Scale Down</h4>  <p>Как вы уже могли догадаться возможность масштабировать “вниз” в облаке не менее важна, чем масштабирование “вверх”. С учетом всех ранее перечисленных подходов можно любое приложение развернуть на одном Extra Small Instance в Windows Azure за $30 и тысячей транзакций хранилища (меньше $0.01) в месяц, если к нему будет мало обращений. Это уже сопоставимо с ценой shared-хостинга.</p>  <p>На этом история scale down заканчивается и начинается история…</p>  <h4>Scale Up\Out</h4>  <p>Сразу же рекомендую посмотреть на Autoscale Application Block (кодовое имя WASABi) из комплекта Enterprise Library. <a href="http://entlib.codeplex.com/wikipage?title=EntLib5Azure" target="_blank">Ссылка на Enterprise Library 5.0 Windows Azure Integration Pack</a>. Этот модуль позволяет задавать правила в соответствии с которыми будет изменяться количество экземпляров ролей в вашем приложении.</p>  <p>Но количество ролей позволяет выдерживать вычислительную нагрузку, хотя в большинстве веб-приложений хранилище становится узким местом.</p>  <p>К сожалению Windows Azure тут не исключение. В блоге Windows Azure Storage описаны <a href="http://blogs.msdn.com/b/windowsazurestorage/archive/2010/05/10/windows-azure-storage-abstractions-and-their-scalability-targets.aspx" target="_blank">scalability targets</a>. Вы можете обнаружить очень интересные сведения о том что максимальное количество сообщений очереди, обрабатываемых в секунду – 500 (по другим сведениям это количество транзакций в секунду). Это очень-очень&#160; мало. И надо не забывать что это предельное значение, на практике его достигнуть будет непросто. Кроме того латентность очереди может достигать 100ms.</p>  <p>Первое что необходимо чтобы избежать высокой латентности на маленьких сообщениях в очереди - установить <a href="http://msdn.microsoft.com/en-us/library/system.net.servicepointmanager.usenaglealgorithm.aspx">ServicePointManager.UseNagleAlgorithm</a> значение false.</p>  <p>Следующая проблема – максимальный размер сообщения в очереди – 8KB, так как для передачи используется Base64 кодировка, то реально данных можно передать около 6KB, кстати строки по-умолчанию не кодируются. Добрые люди уже придумали как решать такую проблему: <a href="http://msdn.microsoft.com/en-us/library/windowsazure/hh690942(v=VS.103).aspx">http://msdn.microsoft.com/en-us/library/windowsazure/hh690942(v=VS.103).aspx</a></p>  <h4>Масштабирование воркеров</h4>  <p>Как вы думаете что будет если взять “наивную” реализацию воркера, как в <a href="http://gandjustas.blogspot.com/2012/01/windows-azure-1.html" target="_blank">первом посте</a> и запустить на Extra Large Instance, насколько быстрее будет работать?</p>  <p>На самом деле вообще не будет быстрее. С этой точки зрения большое количество маленьких воркеров лучше чем один большой. Хотя тоже не лучший вариант по словам представителей Microsoft. С другой стороны куча маленьких воркеров будут пинать Azure Storage гораздо чаще, что несомненно отразится на ценнике. Того же можно добиться если запустить вручную несколько потоков с наивным циклом в воркере, развернутом на Medium instance или более крутой машине.</p>  <p>Чтобы этого избежать надо использовать метод <a href="http://msdn.microsoft.com/en-us/library/windowsazure/ee758358.aspx" target="_blank">CloudQueue.GetMessages</a>. Пример ниже показывает кусок кода для итератора, который потом обрабатывается Rx.</p>  <pre class="brush: csharp;">while (true)
+{
+    var msgsObs = getMessages(32).ToListObservable();
+    yield return msgsObs;
+    var msgs = msgsObs[0];
+
+    var hasMessages = false;
+    foreach (var msg in msgs)
+    {
+        hasMessages = true;
+        idleCount = 0;
+
+        result.OnNext(msg);
+    }
+
+    if (!hasMessages)
+    {
+        var delay = CalulateDelay(idleCount++, MinimumIdleIntervalMs, MaximumIdleIntervalMs, 100);
+        if (delay.TotalMilliseconds &gt;= MaximumIdleIntervalMs)
+        {
+            yield break;
+        }
+
+        yield return Observable.Timer(delay).ToListObservable();
+    }
+}</pre>
+
+<p>Обратите внимание что вызов OnNext должен быть упорядочен, чтобы не возникало Race Condition. Это требование указано в <a href="http://go.microsoft.com/fwlink/?LinkID=205219" target="_blank">Rx Design Guidelines</a>, и если вы его не читали, то крайне рекомендую это сделать.</p>
+
+<p>Кроме того удаление сообщения из очереди в таком коде возлагается на внешний код. </p>
+
+<p>Пример:</p>
+
+<pre class="brush: csharp;">from m in queue.ToObservable(notifications)
+from _1 in Observable.Start(() =&gt; /*work*/, Scheduler.TaskPool)
+from _2 in queue.DeleteMessageAsync(m)
+select Unit.Default;</pre>
+
+<p>Само это выражение не приводит ни к какому эффекту. Для него надо выполнить Subscribe чтобы запустить вычисления. Тогда будет использоваться TaskPool, который довольно эффективно распределяет вычисления по процессорам. Если вычисления длительные (более 10ms - 100ms), то лучше использовать Scheduler.NewThread. Если же у вас IO-bound код, то лучше будет использовать Scheduler.ThreadPool. </p>
+
+<p>Подходы, описанные выше помогут выжать максимум из очереди Windows Azure, оптимально расходуя ресурсы виртуальных машин при этом. Но что делать когда код упрется в ограничение количества сообщений в секунду. Ни добавление воркеров, ни увеличение толщины инстансов не поможет.&#160; В таком случае может помочь секционирование. </p>
+
+<p>Вместо одной очереди вы создаете N очередей. При добавлении сообщения в очередь выбираете случайную. Считываете сразу из всех. Надо как-то разбираться из какой очереди пришло сообщение. Реализация такого нетривиальна и уже есть первый подобный проект на codeplex: <a href="http://partitioncloudqueue.codeplex.com/">http://partitioncloudqueue.codeplex.com/</a>. </p>
+
+<p>Но Rx как всегда рулит и с его помощью очень просто сделать такой partitioning.</p>
+
+<p><em>На клиенте:</em></p>
+
+<pre class="brush: csharp;">List&lt;CloudQueue&gt; queues = /*...*/;
+var observers = queues.Select(q =&gt; q.ToObserver(/*notifier*/))
+                      .ToList();
+
+var rnd = new Random();
+var partitionedObserver = Observer.Create&lt;CloudQueueMessage&gt;(
+        m =&gt; observers[rnd.Next(observers.Count)].OnNext(m),
+        e =&gt; observers.ForEach(obs =&gt; obs.OnError(e)),
+        () =&gt; observers.ForEach(obs =&gt; obs.OnCompleted())
+    );
+partitionedObserver.OnNext(new CloudQueueMessage(/*message*/));</pre>
+
+<p><em>На сервере:</em></p>
+
+<pre class="brush: csharp;">IObservable&lt;Unit&gt; ProcessMessages(CloudQueue queue, /*notifier*/, /*scheduler*/)
+{
+    return from m in queue.ToObservable(/*notifier*/)
+           from _1 in Observable.Start(/*action*/, /*scheduler*/)
+           from _2 in queue.DeleteMessageAsync(m)
+           select Unit.Default;
+}
+
+/*.....*/
+
+List&lt;CloudQueue&gt; queues = /*...*/;
+queues.Select(q =&gt; ProcessMessages(q,/*notifier*/, /*scheduler*/))
+      .Merge()
+      .Subscribe();</pre>
+
+<p>Другой подход, позволяющий решить проблему ограничения на количество сообщений – пакетная передача. Вместо создания множества очередей, вы записываете множество сообщений в один пакет и предаете его. Для этих целей можно использовать CloudBlockBlob. Можно отдельными блоками загружать отдельные сообщения, а потом получить список блоков из блоба. В сообщении при этом передавать только url блоба.</p>
+
+<h4>Заключение</h4>
+
+<p>Все описанные выше способы помогут вам более эффективно реализовывать процессинг в Windows Azure. Для тех кто дочитал до сюда – сюрприз. Весь код с примерами использования есть на <a href="http://rxcloud.codeplex.com/" target="_blank">codeplex</a>, а также библиотека для работы с очередями доступна в <a href="https://nuget.org/packages/RxCloud" target="_blank">NuGet</a>.</p>  

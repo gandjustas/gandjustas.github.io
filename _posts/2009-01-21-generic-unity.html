@@ -1,0 +1,99 @@
+---
+layout: post
+title: "Использование generic-ов в Unity"
+date: '2009-01-21T17:57:00.001+03:00'
+author: "Станислав Выщепан"
+tags:
+- Unity
+- ".NET"
+- IoC-контейнер
+modified_time: '2009-01-22T01:19:19.511+03:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-6989594332339641988
+blogger_orig_url: http://blog.gandjustas.ru/2009/01/generic-unity.html
+---
+
+<p>Unity поддерживает работу с generic-типами.&#160; <br />Можно в контейнер поместить обобщенный тип,&#160; а потом запросить тип с конкретными параметрами.&#160; Подробнее описано по ссылке <a title="http://msdn.microsoft.com/en-us/library/dd203156.aspx" href="http://msdn.microsoft.com/en-us/library/dd203156.aspx">http://msdn.microsoft.com/en-us/library/dd203156.aspx</a></p>  <h4>Пример кода, использующего такую фичу.</h4>  <p>Рассмотрим обобщенный класс репозитария для работы с данными</p>  <pre class="c-sharp" name="code">public interface IRepository&lt;T&gt;
+{
+    IQueryable&lt;T&gt; Items();
+    void Save(T item);
+    void Delete(T item);
+}</pre>
+
+<p>Реализация этого интерфейса для Entity Framework</p>
+
+<pre class="c-sharp" name="code">public class EFRepository&lt;T&gt; : IRepository&lt;T&gt; where T : EntityObject
+{
+    ObjectContext _context;
+    string _entitySetName;
+
+    public EFRepository(ObjectContext context)
+    {
+        _context = context;
+        var container = _context
+            .MetadataWorkspace
+            .GetEntityContainer(
+                _context.DefaultContainerName, 
+                DataSpace.CSpace);
+        var edmEntityType = (EdmEntityTypeAttribute)typeof(T)
+            .GetCustomAttributes(
+                typeof(EdmEntityTypeAttribute), 
+                false)
+            .Single();
+
+        _entitySetName = container.BaseEntitySets
+            .Single(s =&gt; s.ElementType.Name == edmEntityType.Name
+                &amp;&amp; 
+                s.ElementType.NamespaceName == edmEntityType.NamespaceName)
+            .Name;
+    }
+
+    public IQueryable&lt;T&gt; Items()
+    {
+        return _context.CreateQuery&lt;T&gt;(_entitySetName);
+    }
+
+    public void Save(T item)
+    {
+        switch (item.EntityState)
+        {
+            case System.Data.EntityState.Detached:
+                _context.AddObject(_entitySetName, item);
+                goto case System.Data.EntityState.Added;
+
+            case System.Data.EntityState.Added:
+            case System.Data.EntityState.Modified:
+                _context.SaveChanges();
+                break;
+            default:
+                break;
+        }
+    }
+
+    public void Delete(T item)
+    {
+        _context.DeleteObject(item);
+        _context.SaveChanges();
+    }
+}</pre>
+
+<p>Есть EF модель с типом контекста&#160; AddressBookEntities и двумя сущностями Person и PhoneNumber и сервис SomeService1, работающий с этими сущностями. 
+  <br />Конструктор сервиса выглядит так:</p>
+
+<pre class="c-sharp" name="code">public SomeService1(IRepository&lt;Person&gt; personsRepository, 
+                    IRepository&lt;PhoneNumber&gt; phoneNumbersRepository)
+{
+
+}</pre>
+
+<p>Чтобы получить от Unity экземпляр сервиса можно написать такой код:</p>
+
+<pre class="c-sharp" name="code">var container = new UnityContainer();
+container
+    .RegisterType&lt;ObjectContext, AddressBookEntities&gt;(
+            new ContainerControlledLifetimeManager(),
+            new InjectionConstructor())
+    .RegisterType(typeof(IRepository&lt;&gt;), typeof(EFRepository&lt;&gt;));
+
+var service = container.Resolve&lt;SomeService1&gt;();</pre>
+
+<p>Unity сам создаст инстансы конкретных типов при сборке зависимостей SomeService1.</p>  

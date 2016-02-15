@@ -1,0 +1,16 @@
+---
+layout: post
+title: Unity 2.0
+date: '2010-12-05T13:22:00.001+03:00'
+author: "Станислав Выщепан"
+tags:
+- IoC
+- Unity
+- ".NET"
+- Enterprise Library
+modified_time: '2010-12-05T13:22:49.632+03:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1892991462466945611
+blogger_orig_url: http://blog.gandjustas.ru/2010/12/unity-20.html
+---
+
+<p>Давненько я не писал про Unity. За это время успела выйти новая версия этого IoC-контейнера и появилась новая версия Enterprise Library.</p>  <p>Первое заметное изменение в Unity: теперь требуется подключать одну сборку <strong>Microsoft.Practices.Unity</strong>. Хотя AOP для Unity все еще лежит в отдельной сборке <strong>Microsoft.Practices.Unit.Interception</strong>.</p>  <p>Интерфейс класса <strong>UnityContainer</strong> расширился методами <em>IsRegistered</em> и свойством <em>Registrations</em>. Последнее позволяет анализировать что мы уже положили в контейнер.</p>  <p>Три больших изменения в резолвинге.&#160; </p>  <ol style="list-style-position: inside">   <li>Теперь можно резолвить Func&lt;T&gt;, который будет возвращать зарегистрированный в контейнере экземпляр T. Аналогично можно резолвить Func&lt;IEnumerable&lt;T&gt;&gt;, который будет возвращать все зарегистрированные в контейнере <em>именованные</em> зависимости типа T. Это дает возможность переконфигурировать контейнер во время работы программы, так чтобы остальной код об этом не знал. </li>    <li>При наличии нескольких конструкторов в создаваемом классе по-умолчанию выбирается конструктор с максимальным количеством параметров. </li>    <li>В метод Resolve теперь можно передавать объекты ResolverOverride, позволяющие переопределять поведение Unity при резолвинге. </li> </ol>  <p>Добавились два LifetimeManager. <strong>HierarchicalLifetimeManager – </strong>чтобы дочерние контейнеры резолвили свои экземпляры, а не брали родительский. Это может пригодиться в вебе при создании дочерних контейнеров на каждый запрос. <strong>PerResolveLifetimeManager – </strong>позволяет переиспользовать один экземпляр в пределах одного вызова метода Resolve.</p>  <p>Подробнее можно почитать в <a href="http://unity.codeplex.com/wikipage?title=Unity2ChangeLog&amp;referringTitle=Unity2" target="_blank">Change Log</a>.</p>  <p>PS. Также есть версия для Silverlight.</p>  <p>PPS. Качать <a href="http://www.microsoft.com/downloads/details.aspx?FamilyId=bcb166f7-dd16-448b-a152-9845760d9b4c&amp;displaylang=en" target="_blank">здесь</a>.</p>  

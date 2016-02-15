@@ -1,0 +1,70 @@
+---
+layout: post
+title: "Управление временем жизни объектов в Unity"
+date: '2009-01-22T09:39:00.001+03:00'
+author: "Станислав Выщепан"
+tags:
+- Unity
+- ".NET"
+- IoC-контейнер
+modified_time: '2009-01-22T09:39:29.347+03:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-2981088762253866367
+blogger_orig_url: http://blog.gandjustas.ru/2009/01/unity_22.html
+---
+
+<p>При регистрации класса или объекта в контейнере можно указать объект LifetimeManager, который будет управлять временем жизни экземпляров в контейнере.</p>  <p>Класс LifetimeManager очень простой, в нем всего три метода GetValue<strong>,</strong> SetValue и RemoveValue, причем последний не используется.     <br />При помещении <em>объекта </em>в контейнер вызывается метод SetValue, а при необходимости получить объект вызывается GetValue и если он вернул <em>null, </em>то создается новый объект.</p>  <p>В библиотеку Microsoft.Practices.Unity входит несколько менеджеров.</p>  <p><strong>TransientLifetimeManager – </strong>ничего не сохраняет, GetValue всегда возвращает null, поэтому объект создается каждый раз. Этот менеджер используется по-умолчанию при вызове RegisterType.</p>  <p><strong>ContainerControlledLifetimeManager</strong> – сохраняет объект в локальной переменной. Поэтому объект живет столько же, сколько и контейнер. Этот (вернее другой, но с таким же поведением) менеджер используется по-умолчанию при вызове RegisterInstance.</p>  <p><strong>ExternallyControlledLifetimeManager – </strong>сохраняет слабую ссылку (WeakReference) на объект. При использовании этого менеджера и вызове RegisterInstance сам вызывающий код должен управлять временем жизни объекта, помещенного в контейнер. Когда используется RegisterType этот менеджер будет выдавать уже существующий экземпляр объекта если он есть.</p>  <p><strong>PerThreadLifetimeManager</strong> – сохраняет объекты в ThreadStatic словаре. Таким образом каждый поток в программе будет использовать свой набор объектов.</p>  <p>Для применения Unity в ASP.NET приложениях очень легко реализовать LifetimeManager, который сохраняет объект в контексте или в сессии.</p>  <h3>Другие области применения LifetimeManager</h3>  <p>В Unity нет возможности регистрации метода создания объектов, но это очень легко исправить с помощью своего LifetimeManager и пары extension-методов.</p>  <pre class="c-sharp" name="code">public class FactoryLifetimeManager&lt;T&gt;: LifetimeManager
+{
+    Func&lt;T&gt; _factoryMethod;
+    LifetimeManager _baseManager;
+
+    public FactoryLifetimeManager(Func&lt;T&gt; factoryMethod, LifetimeManager baseManager)
+    {
+        _factoryMethod = factoryMethod;
+        _baseManager = baseManager;
+    }
+
+    public override object GetValue()
+    {
+        var obj = _baseManager.GetValue();
+        if (obj == null)
+        {
+            obj = _factoryMethod();
+            SetValue(obj);
+        }
+        return obj;
+    }
+
+    public override void RemoveValue()
+    {
+        _baseManager.RemoveValue();
+    }
+
+    public override void SetValue(object newValue)
+    {
+        _baseManager.SetValue(newValue);
+    }
+}
+
+public static class UnityFactoryMethodExtensions
+{
+
+    public static IUnityContainer RegisterFactory&lt;T&gt;(this IUnityContainer container, Func&lt;T&gt; factoryMethod)
+    {
+        return container.RegisterFactory&lt;T&gt;(factoryMethod, new TransientLifetimeManager());
+    }
+    
+    public static IUnityContainer RegisterFactory&lt;T&gt;(this IUnityContainer container, Func&lt;T&gt; factoryMethod, LifetimeManager lifetimeManager)
+    {
+        return container.RegisterType&lt;T&gt;(new FactoryLifetimeManager&lt;T&gt;(factoryMethod, lifetimeManager));
+    }
+
+    public static IUnityContainer RegisterFactory&lt;T&gt;(this IUnityContainer container, Func&lt;T&gt; factoryMethod, string name)
+    {
+        return container.RegisterFactory&lt;T&gt;(factoryMethod, name, new TransientLifetimeManager());
+    }
+    
+    public static IUnityContainer RegisterFactory&lt;T&gt;(this IUnityContainer container, Func&lt;T&gt; factoryMethod, string name, LifetimeManager lifetimeManager)
+    {
+        return container.RegisterType&lt;T&gt;(name, new FactoryLifetimeManager&lt;T&gt;(factoryMethod, lifetimeManager));
+    }
+}</pre>  

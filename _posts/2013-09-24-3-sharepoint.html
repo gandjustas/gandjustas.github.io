@@ -1,0 +1,56 @@
+---
+layout: post
+title: 3 правила создания списков SharePoint
+date: '2013-09-24T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint 2013
+- spcaf
+- sp2013
+- codereview
+- SharePoint
+modified_time: '2013-09-24T16:55:14.872+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-2819395217344632372
+blogger_orig_url: http://blog.gandjustas.ru/2013/09/3-sharepoint.html
+---
+
+<p>Как ни странно, но на просторах интернета крайне мало информации как <em>правильно</em> делать списки и библиотеки SharePoint. В книгах об этом тоже редко пишут. Горькая правда заключается в том, что подавляющее большинство приложений содержит ошибки, связанные с развертыванием списков в SharePoint.</p> <p>Чтобы устранить львиную долю этих ошибок, надо придерживаться следующих правил:</p> <h3>ContentType</h3> <p>Если вы хотите создать список, то не надо лезть в меню Add –&gt; New Item –&gt; List.&nbsp; Для начала создайте поля для списка и тип контента. Даже если вы думаете, что тип контента будет ровно в одном списке, то все равно создавайте тип контента. </p> <p>Тип контента вместе с полями деплойте в фиче уровня Site, желательно скрытой, чтобы никто не смог просто так отключить и поломать решение.</p> <p>В этой же фиче необходимо выполнить все привязки Workflow, различных Policy и форм.</p> <p>Важно чтобы после активации фичи тип контента был готов к использованию.</p> <h3>ContentTypeBinding</h3> <p>Элемент <em>ContentTypeBinding</em> позволяет привязать тип контента к экземпляру списка. При этом нет необходимости создавать List Definition. Достаточно создать список из одного из стандартных шаблонов, а потом сделать привязку.</p><pre class="brush: xml;">&lt;Elements xmlns="http://schemas.microsoft.com/sharepoint/"&gt;
+  &lt;ListInstance Title="List1"
+                OnQuickLaunch="TRUE"
+                TemplateType="100"
+                FeatureId="00bfea71-de22-43b2-a848-c05709900100"
+                Url="Lists/List1"
+                Description="My List Instance"&gt;
+  &lt;/ListInstance&gt;
+  &lt;ContentTypeBinding 
+      ContentTypeId="0x0100EDFEDEA571A241FD80430F4D48A91346" 
+      ListUrl="Lists/List1"/&gt;
+&lt;/Elements&gt;
+
+</pre>
+<p><em>ContentTypeBinding</em> еще очень хорош тем, что даже при наличии типа контента в списке, он добавит недостающие поля, Workflow, политики. Это очень удобно при апгрейде.</p>
+<p>Деплоить вместе с экземпляром списка в фиче уровня Web, иногда бывает и Site, но нечасто. В коде активации фичи обычно требуется удалить тип контента по-умолчанию, добавить представления, настроить параметры списка итд. </p>
+<p>Необходимость писать код – один из недостатков привязки. Другой недостаток в том, что для нескольких списков код придется копипастить. Это все усложняет поддержку. Иногда проще сделать List Definition.</p>
+<h3>ContentTypeRef</h3>
+<p>Несколько раз подумайте перед тем как сделать List Definition (он же ListTemplate). Это очень опасный артефакт. Он крайне сложен в поддержке (сотни строк XML в самых простых случаях). Если у вас будет список, дефинишен которого вы удалили, то многие функции на сайте поломаются. При этом пользователи смогут самостоятельно создавать списки из дефинишенов через UI.</p>
+<p>Если же вас необходим именно дефинишен, то сделайте его скрытым. Вы сильно снизите “область поражения”.</p>
+<p><strong><em>Но самая главная проблема в том, что List Definition, генерируемый Visual Studio, некорректен. </em></strong></p>
+<p>Поля определенные в List Definition не вызывают методов <em>OnAdded</em> и <em>OnAddedToContentType</em>. Типы контента (<em>ContentType</em>), определенные в дефинишене, не переносят все свойства, например обработчики событий.</p>
+<p>Единственный способ правильно сделать List Definition – использовать только <em>ContentTypeRef</em>. Кроме того, используя <em>ContentTypeRef</em>, можно не указывать <em>Fields</em>, оставить пустой элемент. SharePoint автоматически добавит поля всех типов контента и вызовет их методы.</p><pre class="brush: xml;">  &lt;MetaData&gt;
+    &lt;ContentTypes&gt;
+        &lt;ContentTypeRef ID="0x0100EDFEDEA571A241FD80430F4D48A91346"/&gt;
+        &lt;ContentTypeRef ID="0x0120" /&gt;
+    &lt;/ContentTypes&gt;
+    &lt;Fields&gt;&lt;/Fields&gt;
+    &lt;Views&gt; ... &lt;/Views&gt;
+    &lt;Forms&gt; ... &lt;/Forms&gt;
+  &lt;/MetaData&gt;
+
+
+
+</pre>
+<p><b>UPD</b>. Не убирайте тип контента папки (0x0120), он необходим для корректной работы.</p>
+<h3>Вместо заключения</h3>
+<p>Избежать многих ошибок при разработке под SharePoint поможет SPCAF (<a title="http://www.spcaf.com/" href="http://www.spcaf.com/">http://www.spcaf.com/</a>). Для него можно создавать кастомные правила. Я сделал три правила, которые помогут правильно создавать списки.</p>
+<iframe src="https://skydrive.live.com/embed?cid=E74E2842A8A54DC1&resid=E74E2842A8A54DC1%213720&authkey=AA1M9dnsZ_Ndnd4" width="98" height="120" frameborder="0" scrolling="no"></iframe>
+<p>Инструкция по сборке и установке <a title="http://docs.spcaf.com/v4/SPCAF_OVERVIEW_500_SDK.html" href="http://docs.spcaf.com/v4/SPCAF_OVERVIEW_500_SDK.html">http://docs.spcaf.com/v4/SPCAF_OVERVIEW_500_SDK.html</a></p>  

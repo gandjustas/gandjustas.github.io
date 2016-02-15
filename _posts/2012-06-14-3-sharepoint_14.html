@@ -1,0 +1,68 @@
+---
+layout: post
+title: "Другие 3 фичи SharePoint о которых не знает вообще никто"
+date: '2012-06-14T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint
+modified_time: '2012-06-14T10:00:06.837+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-8283153874095906997
+blogger_orig_url: http://blog.gandjustas.ru/2012/06/3-sharepoint_14.html
+---
+
+<p>В <a href="http://gandjustas.blogspot.com/2012/06/3-sharepoint.html" target="_blank">предыдущем посте</a> я рассказывал про малоизвестные фичи SharePoint. О них не написано в книгах, мало информации в MSDN и только в паре блогов можно прочитать о них хоть что-нибудь.</p>  <p>В этом посте я расскажу про 3 абсолютно никому неизвестные фичи, которые были были найдены мной и коллегами в SharePoint. Скорее всего другой информации по этим фичам вы не найдете.</p>  <h5>Третье место</h5>  <p>Третье место в хит-параде занимают атрибуты <em>Len</em> и <em>MoreText</em> для элемента <em>FieldRef</em> во <em>ViewFields</em> в схеме CAML запроса (<a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spquery.aspx" target="_blank">SPQuery</a>). В <a href="http://msdn.microsoft.com/en-us/library/ms442728.aspx" target="_blank">документации</a> эти атрибуты отсутствуют.&#160; Если указать эти атрибуты для текстового поля, то SharePoint в этом поле вернет урезанную строку, которая вмещается в указанное в Len количество символов, в конце допишет текст, указанный в <em>MoreText</em>.     <br />Причем обрезка текста происходит по границе слова, а не просто по количеству символов.&#160; К сожалению не учитывается Html разметка.</p>  <p>Вот такой код:</p>  <pre class="brush: csharp;">using (var site = new SPSite(&quot;http://localhost&quot;))
+{
+    var web = site.RootWeb;
+    var list = web.GetList(&quot;Lists/Tasks&quot;);
+    var query = new SPQuery()
+    {
+        ViewFields = &quot;&lt;FieldRef Name='Body' Len='20' MoreText='...'/&gt;&quot;,
+        ViewFieldsOnly = true
+    };
+
+    foreach (SPListItem item in list.GetItems(query))
+    {
+        Console.WriteLine(item[&quot;Body&quot;]);
+    }
+}</pre>
+
+<p>Дает вот такой результат:</p>
+
+<pre>&lt;div&gt;Коллекции на вкладке...
+&lt;p&gt;Коллекции на вкладке...
+&lt;div&gt;Коллекции на вкладке...</pre>
+
+<p>Фича обнаружена Антоном Вишняковым (<a href="https://twitter.com/#!/avishnyakov">@avishnyakov</a>).</p>
+
+<h5>Второе место</h5>
+
+<p>На втором месте находится простая и очень полезная фича. Если обработчик события элемента списка (event receiver) активировать в фиче уровня Site, то независимо от того к какому типу списка был привязан обработчик он <strong>будет срабатывать на каждом списке в коллекции сайтов</strong>. В том числе на User Information List хотя <a href="http://msdn.microsoft.com/en-us/library/aa979520.aspx" target="_blank">в MSDN</a> явно написано что на этот список нельзя повесить обработчик. Таким образом можно отслеживать, например, добавление или удаление групп пользователей. 
+
+  <br />Возможно аналогичное будет работать и для других типов обработчиков событий.</p>
+
+<p>Фича обнаружена Долгополовым Сергеем (<a href="http://www.facebook.com/serg3302">http://www.facebook.com/serg3302</a>).</p>
+
+<h5>Первое место</h5>
+
+<p>Очень простая и часто используемая фича. При развертывании файлов в виртуальной файловой системе с помощью модулей (<a href="http://msdn.microsoft.com/en-us/library/ms460356" target="_blank">Module</a>) для элемента <a href="http://msdn.microsoft.com/en-us/library/ms476950" target="_blank">File</a> можно указать атрибут <strong>DoGUIDFixUp=”TRUE”</strong>. Описание в MSDN крайне аскетично. </p>
+
+<p>Если указать этот атрибут, то внутри самого файла и определения его веб-частей(если создается страница) все выражения вида {$ListId: WebRelativeListUrl;} будут заменяться на Guid_ы списка по указанному Url. Точка с запятой в конце Url обязательна. Естественно на момент развертывания указанный список должен существовать.</p>
+
+<p>Как ни странно этот атрибут, видимо, существует еще с SharePoint 2007 и участвует в сохранении сайта в качестве шаблона. Так как при создании сайта из шаблона ID списков получаются новые, а многие компоненты SharePoint ссылаются на списки по ID. Но найти информацию мне не удалось.</p>
+
+<p>Использование <strong>DoGUIDFixUp</strong> помогает деплоить workflow, веб-части и страницы с веб-частями.</p>
+
+<h5>На сладкое</h5>
+
+<p>Если вы используете <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.webpartpages.dataformwebpart.aspx" target="_blank">DataFormWebPart</a> (далее DFWP) для вывода данных с SharePoint помощью XSL и хотите создать веб-часть без серверного кода, то возникает проблема. <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.webcontrols.spdatasource.aspx" target="_blank">SPDataSource</a>, который используется для получения данных в DFWP, ищет список на текущем сайте. 
+
+  <br />Даже если, вы используя DoGUIDFixUp, корректно подставите ID списка на корневом сайте, то при размещении веб-части на дочернем сайте выпадет ошибка.</p>
+
+<p>Оказывается если передать в SPDataSource параметр </p>
+
+<pre class="brush: xml;">&lt;asp:Parameter Name=&quot;WebUrl&quot; DefaultValue=&quot;{sitecollectionroot}&quot;/&gt;</pre>
+
+<p>то SharePoint будет искать список на корневом сайте.</p>
+
+<p>Для примера я сделал проект со списком и веб-частью для отображения на основе DFWP абсолютно без кода.</p>
+<iframe height="120" src="https://skydrive.live.com/embed?cid=E74E2842A8A54DC1&amp;resid=E74E2842A8A54DC1%21834&amp;authkey=AM6qPuldWzLWxhI" frameborder="0" width="98" scrolling="no"></iframe>  

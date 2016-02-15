@@ -1,0 +1,16 @@
+---
+layout: post
+title: "Парси строки правильно или как поломали Windows Azure Workflow"
+date: '2012-07-25T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- ".NET"
+- SharePoint 2013 Preview
+- Workflow
+modified_time: '2012-07-25T11:06:14.290+04:00'
+thumbnail: http://lh6.ggpht.com/-McpFUuXlk7A/UA8T_nhwxDI/AAAAAAAAAOs/kuPr4D6gcIA/s72-c/wlEmoticon-smile%25255B2%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1609214149367116808
+blogger_orig_url: http://blog.gandjustas.ru/2012/07/windows-azure-workflow.html
+---
+
+<p>Решил я на ночь глядя поиграться в новым Workflow для SharePoint 2013. Для этого надо <a href="http://msdn.microsoft.com/en-us/library/jj163276(v=office.15).aspx" target="_blank">поставить Workflow Service</a> (WAW).&#160; Приключения мои начались с того что по ссылке инструкция не правильная. По умолчанию на порту 12290 поднимается HTTPS эндпоинт, в а документации указана команда где используется http.</p>  <p>С этим я быстро разобрался, благо не первый день знаком с SharePoint и его особенностями. Но все равно достучаться до сервиса не получается, отдается ошибка.&#160; Event log написано что не удается распарсить значение конфигурационного параметра которое сейчас 0.1. </p>  <p>Покопавшись в конфигах я обнаружил что нужное значение в базе WFResourceManagementDB в таблице WorkflowServiceConfig, там действительно записано “0.1” в поле типа nvarchar(max).</p>  <p>А причина ошибки банальна. У меня русская версия Windows Server и системный разделитель дробной части стоит запятая, а не точка.</p>  <p>Код внутри сервиса парсит строку вызывая Single.Parse(value) и падает на “неверном” разделителе. Из этого мораль: <strong>всегда парси (и записывай) конфигурационные параметры с указанием культуры, лучше инвариантной</strong>.</p>  <p>Ниже описание ошибки из event log, чтобы этот пост по тексту находился <img style="border-bottom-style: none; border-left-style: none; border-top-style: none; border-right-style: none" class="wlEmoticon wlEmoticon-smile" alt="Улыбка" src="http://lh6.ggpht.com/-McpFUuXlk7A/UA8T_nhwxDI/AAAAAAAAAOs/kuPr4D6gcIA/wlEmoticon-smile%25255B2%25255D.png?imgmax=800" /></p>  <blockquote>   <p>The Workflow Service Backend failed to start at location 'WorkflowServiceBackendHost.OnServiceStarted' due to an exception: System.IO.InvalidDataException: Workflow Service configuration 'WorkflowServiceMaxDispatcherFailureRate' is not formatted correctly. The configuration string should be parsable to a 'Single' type. Current config value is '0.1'.</p> </blockquote>  <p>PS. Использование типа Single намекает на то, что WAW написан на VB.NET.</p>

@@ -1,0 +1,191 @@
+---
+layout: post
+title: "Сращивание expression tree"
+date: '2010-06-14T00:13:00.001+04:00'
+author: "Станислав Выщепан"
+tags:
+- Linq
+- ".NET"
+modified_time: '2010-06-14T00:21:20.397+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-8797654917954639034
+blogger_orig_url: http://blog.gandjustas.ru/2010/06/expression-tree.html
+---
+
+<p>В <a href="http://gandjustas.blogspot.com/2010/05/iqueryable-generics.html">предыдущем посте</a> я показал как можно использовать обобщенное программирование при доступе к данным. С помощью пары простых методов можно заставить работать код вида</p>  <pre class="brush: csharp;">from e in context.Entity1Set.Visible()
+select e;</pre>
+
+<p><em>Пример надуманный, так как предикат для определения видимости простой, и его несложно в каждом выражении записать явно. Но вместо него может быть предикат проверки прав доступа, сам по себе содержащий подзапросы, соединения и тому подобное.</em></p>
+
+<p>Если написать что-то вроде</p>
+
+<pre class="brush: csharp;">from e1 in context.Entity1Set.Visible()
+from e2 in e1.Entity2.Visible()
+select e2;</pre>
+
+<p>То такой код даже не скомпилируется, потому что e1.Entity2 не реализует интерфейс IQueryable&lt;T&gt;. Даже если бы такой ко компилировался, то наверняка отвалился бы в runtume, потому что Linq провайдер не знает что делать с методом Visible.</p>
+
+<p>Проблему можно было бы решить если бы существовал простой способ поставить одно дерево выражений в другое. В языке F# есть возможность сращивания цитат (аналогов деревьев выражений для .NET), то есть подстановки одной цитаты в другую. Тогда вместо вызовов методов для коллекций можно было бы подставлять предикаты прямо в запрос. Что-то вроде такого:</p>
+
+<pre class="brush: csharp;">from e1 in context.Entity1Set    
+where Visible(e1)
+from e2 in e1.Entity2
+where Visible(e2)
+select e2;</pre>
+
+<p>Но какой тип должен быть у предиката Visible? Чтобы код скомпилировался нужно чтобы Visible возвращал <strong>bool</strong>, а чтобы его можно было анализировать в runtime это должен быть тип<strong> Expression&lt;Func&lt;IVisible, bool&gt;&gt;</strong></p>
+
+<p>Идея в следующем, доработать FixupVisitor из <a href="http://gandjustas.blogspot.com/2010/05/iqueryable-generics.html">предыдущего поста</a> чтобы он находил в дереве выражений Expression&lt;Func&lt;…&gt;&gt; и выражение в само дерево. Чтобы такая подстановка компилировалась надо сделать метод, который будет преобразовывать типы, он же будет маркером, который скажет визитору, что надо подставить одно дерево в другое.</p>
+
+<p>Нужен метод Splice (по англ. <em>сращивание</em>), который будет принимать Expression&lt;Func&lt;…,T&gt;&gt; и возвращать T. </p>
+
+<pre class="brush: csharp;">public static T Splice&lt;T,T1&gt;
+			(this Expression&lt;Func&lt;T1, T&gt;&gt; expr, T1 p1)
+{
+    throw new NotSupportedException();
+}</pre>
+
+<p>Вызываться непосредственно этот метод не должен, только использоваться в expression tree.</p>
+
+<p>Теперь добавим в FixupVisitor пару методов</p>
+
+<pre class="brush: csharp;">protected override Expression VisitMethodCall
+                   (MethodCallExpression node)
+{
+    if (!CheckSpliceMethod(node.Method))
+    {
+        return base.VisitMethodCall(node);
+    }
+
+    var args = node.Arguments;
+    var expr = ExpressionExtensions.StripQuotes(args.First());
+
+    //Если выражение не было подставлено непосредственно
+    if (!(expr is LambdaExpression))
+    {
+        expr = (Expression)Expression.Lambda(expr)
+                                     .Compile()
+                                     .DynamicInvoke();
+    }
+    var lambda = expr as LambdaExpression;
+
+    //Подстановка параметров в сращиваемое выражение
+    return base.Visit(ExpressionExtensions.ReplaceAll
+                        (lambda.Body, 
+                         lambda.Parameters, 
+                         args.Skip(1)));
+}
+
+//Проверяет что это нужный метод Splice
+private bool CheckSpliceMethod(MethodInfo mi)
+{
+    if (mi.Name != &quot;Splice&quot; || mi.GetParameters().Length &lt; 1)
+        return false;
+ 
+    var t = mi.GetParameters().First().ParameterType;
+
+    return  t.IsGenericType &amp;&amp;
+            t.GetGenericTypeDefinition() == typeof(Expression&lt;&gt;) &amp;&amp;
+            t.GetGenericArguments()[0]
+             .GetGenericArguments().Last() == mi.ReturnType;
+}</pre>
+
+<p>Для замены формальных параметров лямбды на фактические параметры вызова метода Splice применяется&#160; функция ReplaceAll, которая тоже реализована с помощью визитора.</p>
+
+<pre class="brush: csharp;">class ExpressionReplacer : ExpressionVisitor
+{
+    Predicate&lt;Expression&gt; matcher;
+    Func&lt;Expression, Expression&gt; replacer;
+
+    public ExpressionReplacer
+               (Predicate&lt;Expression&gt; matcher, 
+                Func&lt;Expression, Expression&gt; replacer)
+    {
+        this.matcher = matcher;
+        this.replacer = replacer;
+    }
+
+    public ExpressionReplacer(Expression searchFor, 
+                              Expression replaceWith)
+        : this(e =&gt; e == searchFor, _ =&gt; replaceWith)
+    { }
+
+    public override Expression Visit(Expression node)
+    {            
+        if(matcher(node))
+        {
+            return replacer(node);
+        }
+
+        return base.Visit(node);
+    }
+}
+
+public static class ExpressionExtensions
+{
+    public static Expression StripQuotes(Expression expression)
+    {
+        if (expression.NodeType == ExpressionType.Quote)
+        {
+            return (expression as UnaryExpression).Operand;
+        }
+        else return expression;
+    }
+
+    public static Expression Replace
+		      (Expression expression, 
+                       Predicate&lt;Expression&gt; matcher, 
+                       Func&lt;Expression, Expression&gt; replacer)
+    {
+        return new ExpressionReplacer(matcher, replacer)
+                       .Visit(expression);
+    }
+
+    public static Expression Replace
+                      (Expression expression, 
+                       Expression searchFor, 
+                       Expression replaceWith)
+    {
+        return new ExpressionReplacer(searchFor, replaceWith)
+                       .Visit(expression);
+    }
+
+    public static Expression ReplaceAll
+                  (Expression expression, 
+                   IEnumerable&lt;Expression&gt; searchFor, 
+                   IEnumerable&lt;Expression&gt; replaceWith)
+    {
+        return searchFor.Zip(replaceWith, Tuple.Create)
+                        .Aggregate(expression, (e, p) =&gt; 
+                             Replace(expression, 
+                                     p.Item1, p.Item2));
+    }
+}</pre>
+
+<p>Теперь тестовый пример </p>
+
+<pre class="brush: csharp;">static void Main(string[] args)
+{
+    Expression&lt;Func&lt;IVisible, bool&gt;&gt; 
+	visiblePredicate = e =&gt; e.Visible;
+
+    var context = new Model1Container();
+    var q = from e1 in context.Entity1Set                    
+            where visiblePredicate.Splice(e1)
+            from e2 in e1.Entity2
+            where visiblePredicate.Splice(e2)
+            select e2;
+    Console.WriteLine((q.Fix() as ObjectQuery).ToTraceString());
+}</pre>
+
+<p>Дает результат</p>
+
+<pre>SELECT
+[Extent1].[Id] AS [Id],
+[Extent2].[Id] AS [Id1],
+[Extent2].[Visible] AS [Visible],
+[Extent2].[Entity1_Id] AS [Entity1_Id]
+FROM  [dbo].[Entity1Set] AS [Extent1]
+INNER JOIN [dbo].[Entity2Set] AS [Extent2] 
+ON [Extent1].[Id] = [Extent2].[Entity1_Id]
+WHERE ([Extent1].[Visible] = 1) 
+    AND ([Extent2].[Visible] = 1)</pre>  

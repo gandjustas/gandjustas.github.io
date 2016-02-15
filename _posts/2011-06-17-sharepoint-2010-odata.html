@@ -1,0 +1,14 @@
+---
+layout: post
+title: SharePoint 2010 и OData
+date: '2011-06-17T23:33:00.001+04:00'
+author: "Станислав Выщепан"
+tags:
+- OData
+- SharePoint
+modified_time: '2011-06-17T23:33:41.327+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-7662118318010012164
+blogger_orig_url: http://blog.gandjustas.ru/2011/06/sharepoint-2010-odata.html
+---
+
+<p>Наверное все знают что SharePoint 2010 имеет <a href="http://odata.org" target="_blank">OData</a>-сервис, к которому можно обратиться по адресу <a href="http://{siteUrl}/_vti_bin/listdata.svc">http://{siteUrl}/_vti_bin/listdata.svc</a>. Также SharePoint имеет очень мощную службу бизнес-данных (Business Connectivity Services), с помощью которой можно обращаться к различным источникам данных. К сожалению OData-сервисы не входят в число этих источников.</p>  <p>Чтобы исправить это досадное упущение, был создан Custom Connector для BCS, который умеет работать с OData-сервисами. А также был создан генератор модели подключения к внешним данными, чтобы упростить подключение OData источников к BCS. </p>  <p>Найти все это можно по адресу <a href="http://vega-soft.com/spodata/">http://vega-soft.com/spodata/</a>.</p>  <p>Фичи, реализованные на данный момент:</p>  <ol>   <li>Генератор модели</li>    <li>CRUD-операции с данными</li>    <li>BCS фильтры: Limit, Paging, Comparison, LastId</li> </ol>  <p>Фичи, планирующиеся в ближайшее время:</p>  <ol>   <li>Ассоциации (связи между сущностями)</li>    <li>Поддержка ad-hoc запросов</li>    <li>Аутентификация</li>    <li>Улучшенный генератор модели</li> </ol>  <p>PS. Для тех кто не в курсе что такое OData – рекомендую детально изучить сайт <a href="http://www.odata.org/">http://www.odata.org/</a>.</p>  

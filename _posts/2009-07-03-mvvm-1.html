@@ -1,0 +1,220 @@
+---
+layout: post
+title: "Паттерн MVVM. Часть 1."
+date: '2009-07-03T01:17:00.001+04:00'
+author: "Станислав Выщепан"
+tags:
+- Unity
+- ".NET"
+- MVVM
+- WPF
+- IoC-контейнер
+modified_time: '2009-07-03T01:17:19.658+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-3133637910528888391
+blogger_orig_url: http://blog.gandjustas.ru/2009/07/mvvm-1.html
+---
+
+<p>MVVM – Model – View – ViewModel – паттерн организации PL (<strong>presentation layer</strong> – уровень представления).</p>  <p>Паттерн MVVM применяется при создании приложений с помощью WPF и Silverlight.&#160;&#160; Этот паттерн был придуман архитектором этих самых WPF и Silverlight - John Gossman (<a href="http://blogs.msdn.com/johngossman/default.aspx">его блог</a>). Паттерн MVVM применяется в Expression Blend.</p>  <p>Идеологически MVVM похож на <a href="http://martinfowler.com/eaaDev/PresentationModel.html">Presentation Model</a> описанный небезызвестным Фаулером, но MVVM сильно опирается на возможности WPF.</p>  <p>Основная особенность MVVM заключается в том, что все поведение выносится из <strong>представления (view) </strong>в<strong>&#160; модель представления (view model)</strong>.&#160; Связывание представления и модели представления осуществляется декларативными байндингами в XAML разметке. Это позволяет тестировать все детали интерфейса не используя сложных инструментальных средств.</p>  <p>Я сначала хотел кратко описать применение MVVM и Unity для построения PL, но понял что одного поста для описания возможностей MVVM очень мало.</p>  <p>В WPF для передачи данных между объектами и визуальными элементами используются <strong>байндинги</strong> (binding – привязка) в простонародии <em>биндинги</em>. Передача может быть как однонаправленная, так и двунаправленная. Работают байндинги с помощью зависимых свойств (<strong>DependencyProperty</strong>) или интерфейса <strong>INotifyPropertyChanged</strong>. Передача управляющих воздействий от визуальных элементов осуществляется с помощью <strong>команд</strong>, реализующих интерфейс <strong>ICommand</strong>.</p>  <p>Для начала надоевший уже пример SayHello.</p>  <p>Как всегда используется супер-сложный класс бизнес логики:</p>  <pre class="c-sharp" name="code">public interface ISayHelloService
+{
+    string SayHello(string name);
+}
+ 
+public class SayHelloSerivce : ISayHelloService
+{
+    public string SayHello(string name)
+    {
+        return &quot;Привет, &quot; + name;
+    }
+}</pre>
+
+<p>Теперь определение класса команды, которая состоит из пары делегатов</p>
+
+<pre class="c-sharp" name="code">public class DelegateCommand : ICommand
+{
+    Func&lt;object, bool&gt; _canExecute;
+    Action&lt;object&gt; _execute;
+
+    //Конструктор
+    public DelegateCommand(Func&lt;object, bool&gt; canExecute, Action&lt;object&gt; execute)
+    {
+        this._canExecute = canExecute;
+        this._execute = execute;
+    }
+
+    //Проверка доступности команды
+    public bool CanExecute(object parameter)
+    {
+        return this._canExecute(parameter);
+    }
+
+    //Выполнение команды
+    public void Execute(object parameter)
+    {
+        this._execute(parameter);
+    }
+
+    //Служебное событие
+    public event EventHandler CanExecuteChanged
+    {
+        add { CommandManager.RequerySuggested += value; }
+        remove { CommandManager.RequerySuggested += value; }
+    }
+}</pre>
+
+<p>Теперь напишем нашу модель представления.</p>
+
+<pre class="c-sharp" name="code">public class ViewModel: INotifyPropertyChanged
+{
+    //Имя
+    public string Name { get; set; }
+
+    //Текст приветствия
+    public string HelloText { get; set; }
+
+    //Команда
+    public ICommand SayHelloCommand
+    {
+        get
+        {
+            return _sayHelloCommand;
+        }
+    }
+
+
+    ISayHelloService _service;
+
+    ICommand _sayHelloCommand;
+
+    
+    //Конструктор
+    public ViewModel(ISayHelloService service)
+    {
+        this._service = service;
+
+        //Создаем команду
+        this._sayHelloCommand = new DelegateCommand(
+            o =&gt; CanExecuteHello(),
+            o =&gt; ExecuteHello());
+    }
+        
+    private void ExecuteHello()
+    {
+        this.HelloText = _service.SayHello(this.Name);
+        OnPropertyChanged(&quot;HelloText&quot;);
+    }
+
+    private bool CanExecuteHello()
+    {
+        return !string.IsNullOrEmpty(this.Name);
+    }
+
+
+    //Для поддержка байндинга
+    #region INotifyPropertyChanged Members
+
+    public event PropertyChangedEventHandler PropertyChanged;
+
+    protected void OnPropertyChanged(string propertyName)
+    {
+        var handler = PropertyChanged;
+        if (handler != null)
+        {
+            handler(this, 
+                    new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    #endregion
+}</pre>
+
+<p>Получилось слегка многословно по причине того, что&#160; пример искусственный.</p>
+
+<p>Дело за разметкой:</p>
+
+<pre class="xml" name="code">&lt;StackPanel&gt;
+    &lt;Grid&gt;
+        &lt;Grid.ColumnDefinitions&gt;
+            &lt;ColumnDefinition Width=&quot;75&quot; /&gt;
+            &lt;ColumnDefinition Width=&quot;*&quot; /&gt;
+        &lt;/Grid.ColumnDefinitions&gt;
+        &lt;TextBlock Text=&quot;Введите имя&quot;/&gt;
+        &lt;TextBox Text=&quot;{Binding Name}&quot; Grid.Column=&quot;1&quot;/&gt;
+    &lt;/Grid&gt;
+    &lt;TextBox Text=&quot;{Binding HelloText}&quot;/&gt;
+    &lt;Button Content=&quot;Сказать привет&quot; Command=&quot;{Binding SayHelloCommand}&quot;/&gt;
+&lt;/StackPanel&gt;</pre>
+
+<p>И немного изменим констрктор View:</p>
+
+<pre class="c-sharp" name="code">public Window1(ViewModel model)
+{
+    InitializeComponent();
+    DataContext = model;
+}</pre>
+
+<p>В App.xaml уберем атрибут StartupUri, и добавим обработчик события Startup, в котором напишем следующий код:</p>
+
+<pre class="c-sharp" name="code">var container = new UnityContainer();
+container
+    .RegisterType&lt;ViewModel&gt;()
+    .RegisterType&lt;ISayHelloService, SayHelloSerivce&gt;();
+var window = container.Resolve&lt;Window1&gt;();
+window.Show();</pre>
+
+<p>Можно нажать F5 и смотреть что получилось.</p>
+
+<p>Теперь воспользуемся фичами WPF. </p>
+
+<p>Изменим код ViewModel.</p>
+
+<pre class="c-sharp" name="code">public class ViewModel : INotifyPropertyChanged
+{
+    //Имя
+    public string Name
+    {
+        get { return this._name; }
+        set
+        {
+            this._name = value;
+            OnPropertyChanged(&quot;Name&quot;);
+            OnPropertyChanged(&quot;HelloText&quot;);
+        }
+    }
+
+
+    //Текст приветствия
+    public string HelloText
+    {
+        get
+        {
+            return _service.SayHello(this.Name);
+        }
+    }
+
+    string _name;
+    ISayHelloService _service;
+
+    //Конструктор
+    public ViewModel(ISayHelloService service)
+    {
+        this._service = service;
+    }
+
+    //Для поддержка байндинга
+    #region INotifyPropertyChanged Members
+    //Без изменений
+    #endregion
+}</pre>
+
+<p>В разметке View уберем кнопку и поставим Mode=OneWay для байндинга второго текстбокса. </p>
+
+<p>Кроме этого слега изменим App.xml.cs</p>
+
+<pre class="c-sharp" name="code">var container = new UnityContainer();
+container
+    .RegisterType&lt;ViewModel&gt;(new ContainerControlledLifetimeManager())
+    .RegisterType&lt;ISayHelloService, SayHelloSerivce&gt;();
+container.Resolve&lt;Window1&gt;().Show();
+container.Resolve&lt;Window1&gt;().Show();</pre>
+
+<p>Два созданных окна будут разделять одну ViewModel и при вводе имени в одном из окон результат будет отображаться во всех.</p>  

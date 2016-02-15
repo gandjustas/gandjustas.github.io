@@ -1,0 +1,149 @@
+---
+layout: post
+title: "Решение задачи. Задача таймера, продолжение."
+date: '2011-10-11T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint
+modified_time: '2011-10-14T11:51:23.122+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-678030169536118699
+blogger_orig_url: http://blog.gandjustas.ru/2011/10/blog-post_11.html
+---
+
+<ol>   <li><a href="http://gandjustas.blogspot.com/2011/08/sharepoint.html">Список задач для проверки навыков</a>. </li>    <li><a href="http://gandjustas.blogspot.com/2011/10/blog-post.html">Создание задачи таймера</a>. </li>    <li>Использование подходящих классов (<em>этот пост</em>). </li>    <li><a href="http://gandjustas.blogspot.com/2011/10/blog-post_13.html" target="_blank">Передача команд задаче таймера</a>. </li>    <li><a href="http://gandjustas.blogspot.com/2011/10/blog-post_14.html">Взаимодействие веб-фронтэнда с задачами таймера</a>. </li> </ol>  <p>В прошлый раз я писал о том <a href="http://gandjustas.blogspot.com/2011/10/blog-post.html" target="_blank">как создать задачу таймера в SharePoint</a>. Такой код писать не нужно. Надеюсь никто не успел скопипастить код к себе в проект.</p>  <p>В SharePoint 2010 основной класс для создания задач таймера – <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.sppausablejobdefinition.aspx" target="_blank">SPPausableJobDefinition</a>. В отличии от обычного <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spjobdefinition.aspx" target="_blank">SPJobDefinition</a>, как вы можете догадаться из названия, SPPausableJobDefinition можно останавливать.</p>  <p>Чтобы создать приостанавливаемую задачу таймера надо переопределить метод <a href="http://msdn.microsoft.com/en-us/library/ee541400.aspx" target="_blank">Execute с параметром SPJobState</a>. Объект класса <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spjobstate.aspx" target="_blank">SPJobState</a> содержат как свойства, говорящие о том что задача должна остановиться, так и методы сохранения текущего состояния задачи таймера для продолжения работы.</p>  <p>С одной стороны возможность приостанавливать выполнение задачи таймера ведет только к усложнению кода, но нету необходимости писать код, он уже есть в сборке Microsoft.SharePoint.</p>  <p>Класс, который больше всего подходит к нашей задаче – <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spallsitesjobdefinition.aspx" target="_blank">SPAllSitesJobDefinition</a>. Задачи таймера, наследующиеся от этого класса должны переопределить только один метод <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spallsitesjobdefinition.processsite.aspx" target="_blank">ProcessSite</a>.</p>  <pre class="brush: csharp;">public class TimerJob : SPAllSitesJobDefinition
+{
+    public TimerJob()
+        : base()
+    {
+
+    }
+
+    public TimerJob(SPWebApplication webApp)
+        : base(Constants.TimerJobName, webApp)
+    {
+        this.Title = &quot;Folder cleanup job&quot;;
+    }
+
+    public override void ProcessSite(SPSite site, SPJobState jobState)
+    {            
+        foreach (SPWeb web in site.AllWebs)
+        {
+            try
+            {
+                ProcessWeb(web);
+            }
+            finally
+            {
+                web.Dispose();
+            }
+        }
+    }
+
+    private void ProcessWeb(SPWeb web)
+    {
+        //omited for clarity
+    }
+}</pre>
+
+<p>Кода получилось даже меньше чем в первом варианте, при этом он поддерживает приостановку и запуск с места остановки, а также обновляет значения прогресса выполнения (это новая фича SharePoint 2010).</p>
+
+<p>В прошлом посте писал о выборе значения SPJobLockType. В SharePoint 2010 нет такой необходимости. Разные варианты запуска задач таймера реализованы разными классами в сборке Microsoft.SharePoint. 
+  <br />Например: <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spcontentdatabasejobdefinition.aspx">SPContentDatabaseJobDefinition</a>, <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spfirstavailableservicejobdefinition.aspx">SPFirstAvailableServiceJobDefinition</a>, <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spserverjobdefinition.aspx">SPServerJobDefinition</a>, <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spservicejobdefinition.aspx">SPServiceJobDefinition</a>.</p>
+
+<p>Далее можно модифицировать код ProcessSite и ProcessWeb чтобы поддерживать перезапуск задачи с конкретной библиотеки документов. Но если вы разрабатываете для SharePoint Server 2010 (платной версии), то вам и это не надо делать. Код уже написан.</p>
+
+<h5>TimerJobUtility</h5>
+
+<p><a href="http://msdn.microsoft.com/en-us/library/microsoft.office.server.utilities.timerjobutility.aspx" target="_blank">TimerJobUtility</a> – класс из сборки Microsoft.Office.Server. Он позволяет обходить содержимое SharePoint учитывая возможность остановки и перезапуска задачи таймера.</p>
+
+<p>С использованием TimerJobUtility методы будут выглядеть так:</p>
+
+<pre class="brush: csharp;">TimerJobUtility tju;
+public override void ProcessSite(SPSite site, SPJobState jobState)
+{
+    tju = new TimerJobUtility(Constants.TimerJobName, jobState);
+    tju.DisableEventFiring = false;
+    tju.CancellationGranularity = IterationGranularity.List;
+    tju.ResumeGranularity = IterationGranularity.List;
+    tju.ProcessSite(site, s =&gt; tju.ProcessSite(s, ProcessWeb, null));
+}
+
+private void ProcessWeb(SPWeb web)
+{
+    tju.ProcessLists(web.Lists, ProcessList, null);
+}
+
+private void ProcessList(SPList list)
+{
+    if (!list.Hidden &amp;&amp; list is SPDocumentLibrary)
+    {
+        DeleteEmptyFolders(list.RootFolder.SubFolders);
+    }
+}
+
+private void DeleteEmptyFolders(SPFolderCollection folders)
+{
+    //omited for clarity
+}</pre>
+
+<p>С таким кодом в случае остановки и перезапуска задачи она продолжит выполнять начиная с того списка, который не был обработан. Кроме того есть возможность блокировать срабатывание обработчиков событий установкой флага DisableEventFiring.</p>
+
+<h5>SPFolderHierarchy</h5>
+
+<p>5000… Для всех разработчиков SharePoint 2010 это магическая цифра. Если у вас запрос должен обработать более 5000 строк, то выпадает <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spquerythrottledexception.aspx" target="_blank">SPQueryThrottledException</a>. Причем даже если реально будет возвращено мало строк, но для их вычисления придется просмотреть более 5000 элементов, то будет ошибка. В таких случаях помогает индекс или постраничное разбиение.</p>
+
+<p>Нетрудно догадаться что стандартная реализация свойства SubFolders считывает все элементы из папки, которых может оказаться более 5000., что вызовет ошибку. Чтобы обрабатывать такие случаи в SharePoint Server 2010 (платной версии) есть класс <a href="http://msdn.microsoft.com/en-us/library/microsoft.office.server.utilities.spfolderhierarchy.aspx" target="_blank">SPFolderHierarchy</a>, который помогает избежать проблем и содержит множество эвристик для максимального быстродействия навигации по папкам.</p>
+
+<p>В итоге, используя все вышеперечисленные возможности, код будет такой:</p>
+
+<pre class="brush: csharp;">public class TimerJob : SPAllSitesJobDefinition
+{
+    TimerJobUtility tju;
+
+    public TimerJob(): base() { }
+
+    public TimerJob(SPWebApplication webApp)
+        : base(Constants.TimerJobName, webApp)
+    {
+        this.Title = &quot;Folder cleanup job&quot;;
+    }
+
+    public override void ProcessSite(SPSite site, SPJobState jobState)
+    {
+        tju = new TimerJobUtility(Constants.TimerJobName, jobState);
+        tju.DisableEventFiring = false;
+        tju.CancellationGranularity = IterationGranularity.List;
+        tju.ResumeGranularity = IterationGranularity.List;
+        tju.ProcessSite(site, s =&gt; tju.ProcessSite(s, ProcessWeb, null));
+    }
+
+    private void ProcessWeb(SPWeb web)
+    {
+        tju.ProcessLists(web.Lists, ProcessList, null);
+    }
+
+    private void ProcessList(SPList list)
+    {
+        if (!list.Hidden &amp;&amp; list is SPDocumentLibrary)
+        {
+            DeleteEmptyFolders(new SPFolderHierarchy(list));
+        }
+    }
+
+    private void DeleteEmptyFolders(SPFolderHierarchy h)
+    {
+        foreach (SPFolder folder in (h as IEnumerable&lt;SPFolder&gt;))
+        {
+            if (folder.Item != null)
+            {
+                DeleteEmptyFolders(h.GetSubFolders(folder.ServerRelativeUrl));
+                if (folder.ItemCount == 0)
+                {
+                    folder.Delete();
+                }
+            }
+        }
+    }
+}</pre>
+
+<p>Кроме повышенной надежности такого кода есть еще одно преимущество: классы TimerJobUtility и SPFolderHierarchy очень активно пишут диагностические сообщения в ULS. Таким образом вам гораздо будет легче отлаживать такой код на удаленной машине.</p>  

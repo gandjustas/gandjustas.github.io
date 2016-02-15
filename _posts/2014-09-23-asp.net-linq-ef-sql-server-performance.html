@@ -1,0 +1,62 @@
+---
+layout: post
+title: "Оптимизация высоконагруженных ASP.NET приложений, работающих с MS SQL Server
+  с помощью LINQ"
+date: '2014-09-23T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- Linq
+- Entity Framework
+- "быстродействие"
+- sql
+modified_time: '2014-10-14T23:54:03.593+04:00'
+thumbnail: http://lh4.ggpht.com/--CTCXvNPJk8/VCBikJADdDI/AAAAAAAAAiw/smChv-M-wPk/s72-c/image_thumb%25255B2%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-5577926135920557447
+blogger_orig_url: http://blog.gandjustas.ru/2014/09/asp.net-linq-ef-sql-server-performance.html
+---
+
+<div style="text-align: left" dir="ltr" trbidi="on">Доклад с таким длинным и непонятным названием я читал на SQL Server User Group 10 сентября в Москве. Ниже слайды запись доклада:<br>  <div id="scid:5737277B-5D6D-4f48-ABFC-DD9C333F4C5D:0d9c2d31-8563-4fd2-a8df-559d42e593ba" class="wlWriterEditableSmartContent" style="float: none; padding-bottom: 0px; padding-top: 0px; padding-left: 0px; margin: 0px; display: inline; padding-right: 0px"><div><object width="448" height="252"><param name="movie" value="http://www.youtube.com/v/I2cNUUC3tiI?hl=en&amp;hd=1"></param><embed src="http://www.youtube.com/v/I2cNUUC3tiI?hl=en&amp;hd=1" type="application/x-shockwave-flash" width="448" height="252"></embed></object></div></div> <iframe src="//www.slideshare.net/slideshow/embed_code/40267657" width="476" height="400" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"></iframe> <p> К сожалению, как обычно я не показал все что хотел, часть материала не попала на видео запись. Но я восполню этот недостаток. <br>Как вы думаете, можно ли на Linq делать запросы, которые работают быстрее рукопашных? Оказывается да, и очень просто.<br>Например надо сделать функцию, которая отбирает заказы по дате отгрузки. Если параметр указал, то выбрать заказы за эту дату. А если не указана дата, то выбрать все заказы, у которых дата отгрузки пустая. Обычный разработчик напишет такую процедуру:</p><pre class="brush: sql;">CREATE PROCEDURE [dbo].[GetTransactionsByShipDate]
+    @shipDate datetime
+AS
+    SELECT t.Id, t.ProductId, t.TransactionDate 
+       from Transactions t
+    where
+        (@shipDate is not null 
+          and t.ShippedDate = @shipDate) 
+     or (@shipDate is null 
+          and t.ShippedDate is null)
+
+</pre>Эта процедура подвержена parameter sniffing problem. Проблема заключается в том, что план процедуры генерируется один раз при первом вызове с учетом фактических параметров при вызове. Если при первом вызове ShipDate был NULL (низкая селективность), то сгенерируется план с Index Scan. Если же первый вызов был с конкретным значением даты, то получится Index Seek, который будет неэффективно работать для значений с низкой селективностью.<br>Простой тест:<br><pre class="brush: sql;">DBCC FREEPROCCACHE
+GO
+
+EXEC    [dbo].[GetTransactionsByShipDate] NULL
+GO
+
+declare @shipdate datetime = getdate()
+EXEC    [dbo].[GetTransactionsByShipDate] @shipdate
+GO
+
+DBCC FREEPROCCACHE
+GO
+
+declare @shipdate datetime = getdate()
+EXEC    [dbo].[GetTransactionsByShipDate] @shipdate
+GO
+
+EXEC    [dbo].[GetTransactionsByShipDate] NULL
+GO
+
+</pre>Результаты:<br><a href="http://lh6.ggpht.com/-R49W4I757zM/VCBii5f6o9I/AAAAAAAAAio/NeMI2DimBQ8/s1600-h/image%25255B4%25255D.png"><img title="image" style="background-image: none; padding-top: 0px; padding-left: 0px; display: inline; padding-right: 0px" border="0" alt="image" src="http://lh4.ggpht.com/--CTCXvNPJk8/VCBikJADdDI/AAAAAAAAAiw/smChv-M-wPk/image_thumb%25255B2%25255D.png?imgmax=800" width="560" height="315"></a><br>Как видите план оказывается далеко не оптимальным в обоих случаях.<br>А с помощью Linq можно написать так:<br><pre class="brush: csharp; ">private static IQueryable&lt;Transaction&gt; GetValues(
+    IQueryable&lt;Transaction&gt; query, 
+    DateTime? dateTime)
+{
+    if (dateTime.HasValue)
+    {
+        return query.Where(t =&gt; t.ShippedDate == dateTime.Value);
+    }
+    else
+    {
+        return query.Where(t =&gt; t.ShippedDate == null);
+    }
+}
+</pre>Тогда буду сгенерированы два разных запроса, каждый со своим, оптимальным для данного запроса, планом.<br>Более того, такая оптимизация для null value встроена в провайдер Linq2DB. Там можно непосредственно nullable значения подставлять в linq.<br>Более того, можно использовать filtered index, когда больше 2% значений по индексируемому полю равны NULL.</div>  

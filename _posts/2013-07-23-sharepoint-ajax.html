@@ -1,0 +1,119 @@
+---
+layout: post
+title: SharePoint и Ajax
+date: '2013-07-23T13:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- ajax
+- js
+- sp2013
+- javascript
+- typescript
+- SharePoint
+modified_time: '2013-07-23T13:00:00.822+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1005284734626437002
+blogger_orig_url: http://blog.gandjustas.ru/2013/07/sharepoint-ajax.html
+---
+
+<p>Как вы думаете, сколько способов сделать ajax запрос в SharePoint? А без jQuery и дополнительных библиотек? Нет, XMLHttpRequest руками писать на надо.</p> <h3>Sys.Net.WebRequest \ Sys.Net.WebRequestExecutor</h3> <p>Эти классы находятся в библиотеке MicrosoftAjax. Она подгружается на каждой странице SharePoint и вы можете использовать её на своих страницах. </p> <p>Класс <em>Sys.Net.WebRequest</em> описывает параметры запроса, а <em>Sys.Net.WebRequestExecutor</em>, вернее его наследник, выполняет запрос с указанными параметрами. Можно создавать свои реализации WebRequestExecutor, например для тестирования или для проксирования запросов.</p> <p>Недостаток этих классов в чрезмерной многословности.</p><pre class="brush: js;">var request = new Sys.Net.WebRequest();         
+request.set_url(url);
+request.set_httpVerb("GET");         
+request.add_completed(function(executor, eventArgs) {             
+    if(executor. get_responseAvailable()) {
+        //do stuff
+    }
+});
+
+request.invoke(); 
+</pre>
+<p>Вот так придется писать на каждый запрос. Семантически похоже на то, что есть в C#, но после jQuery выглядит страшно. Тем не менее этот api является базовым для всего, что работает в SharePoint.</p>
+<p>Ссылки на MSDN:<br><em>Sys.Net.WebRequest</em> - <a title="http://msdn.microsoft.com/en-us/library/bb310979(v=vs.100).aspx" href="http://msdn.microsoft.com/en-us/library/bb310979(v=vs.100).aspx">http://msdn.microsoft.com/en-us/library/bb310979(v=vs.100).aspx</a><br><em>Sys.Net.WebRequestExecutor</em>- <a title="http://msdn.microsoft.com/en-us/library/bb397434(v=vs.100).aspx" href="http://msdn.microsoft.com/en-us/library/bb397434(v=vs.100).aspx">http://msdn.microsoft.com/en-us/library/bb397434(v=vs.100).aspx</a></p>
+<h3>SP.PageRequest</h3>
+<p>Этот класс находится в библиотеке sp.js и доступен с SharePoint 2010.</p>
+<p>У нем есть два статических метода doGet и doPost.<br></p><pre class="brush: js;">SP.PageRequest.doGet(
+    url,'application/json', 
+    function(o, args) {
+        var webRequestExecutor = args.get_executor();
+        //do stuff
+    }, 
+    function(o, args) {
+        //args.get_errorMessage();
+    });
+</pre>
+<p>Аналогично работает метод doPost, который может также передавать body.</p>
+<p>Огромный недостаток этих методов в том, что они не позволяют указать загловки запроса. А второй параметр, который называется expectedContentType, сравнивается с Content-Type результата и выкидывает исключение при несовпадении.</p>
+<p>Конечно можно создать экземпляр <em>SP.PageRequest</em>, из него получить объект <em>Sys.Net.WebRequest</em>, и через него выставить заголовки. Но это будет еще более многословно, чем при использовании <em>Sys.Net.WebRequest</em> напрямую.</p>
+<p>Но есть и преимущество. SP.PageRequest обрабатывает RequestDigest, что поможет делать запросы к SharePoint.</p>
+<blockquote>
+<p>Если вы не знаете, то в SharePoint&nbsp; в post запросе к странице нельзя делать Update, если не передан корректный Request Digest. Аналогично нельзя обращаться к REST эндпоинту для изменения данных без RequestDigiest. Это должно защищать от CSRF атак.</p></blockquote>
+<p>Документация по <em>SP.PageRequest</em> - <a title="http://msdn.microsoft.com/en-us/library/ee547454(v=office.14).aspx" href="http://msdn.microsoft.com/en-us/library/ee547454(v=office.14).aspx">http://msdn.microsoft.com/en-us/library/ee547454(v=office.14).aspx</a></p>
+<h3>SP.WebProxy</h3>
+<p>Этот класс также находится в sp.js. В отличие от предыдущих, его предназначение – делать кросс-сайтовые запросы. К сожалению это доступно только для приложений, из обычного скрипта воспользоваться этим классом не получится.</p>
+<p>Кстати он не менее многословен, чем Sys.Net.WebRequest, так что у вас и желания не будет его использовать для всего подряд.</p><pre class="brush: js;">var context = SP.ClientContext.get_current();
+var request = new SP.WebRequestInfo();
+request.set_url(
+    "http://services.odata.org/Northwind/Northwind.svc/Categories"
+    );
+request.set_method("GET");
+
+request.set_headers({ "Accept": "application/json;odata=verbose" });
+var response = SP.WebProxy.invoke(context, request);
+context.executeQueryAsync(successHandler, errorHandler);
+
+function successHandler() {
+    if (response.get_statusCode() == 200) {
+        //Do stuff
+    }
+}
+
+</pre>
+<p>Но и это еще не все. Чтобы код выше заработал надо в манифест приложения вписать следующий элемент:</p><pre class="brush: xml;">&lt;RemoteEndpoints&gt;
+    &lt;RemoteEndpoint Url=" http://services.odata.org" /&gt;
+&lt;/RemoteEndpoints&gt;
+
+</pre>
+<p>Подробно о применении класса <em>SP.WebProxy</em> по ссылке - <a title="http://msdn.microsoft.com/en-us/library/fp179895.aspx" href="http://msdn.microsoft.com/en-us/library/fp179895.aspx">http://msdn.microsoft.com/en-us/library/fp179895.aspx</a></p>
+<h3>SP.RequestExecutor</h3>
+<p>Этот класс находится в отдельном файле sp.requestexecutor.js, может работать как в SharePoint, так и вне его.</p>
+<p>По-умолчанию на страницы SharePoint он не загружается и чтобы его использовать надо написать такой код:</p><pre class="brush: js;">SP.SOD.registerSod('sp.requestexecutor.js',
+            '/_layout/15/sp.requestexecutor.js');
+SP.SOD.executeFunc('sp.requestexecutor.js', 
+            'SP.RequestExecutor', 
+            function() {
+                //Do stuff
+            });
+</pre>
+<p>Если у вас html страница в SharePoint, то можете просто подключить скрипт на страницу и не использовать <em>Script On Demand</em>.</p>
+<p>Использовать <em>SP.RequestExecutor</em> гораздо проще, чем предшествующие варианты:</p><pre class="brush: js;">var re = new SP.RequestExecutor(targetSiteUrl);
+re.executeAsync({
+    url: targetUrl,
+    method: 'GET',
+    success:function(response) {
+        //console.log(response.body);
+        //do stuff
+    }
+});
+</pre>
+<p>Также, как и <em>SP.PageRequest</em>,<em> SP.RequestExecutor</em> автоматически отправляет RequestDigiest. Так что руками передавать его, как написано во многих примерах, не обязательно.</p>
+<p><em>SP.RequestExecutor</em> может работать с бинарными данными, но из-за ошибки надо устраивать пляски с бубуном чтобы все заработало - <a title="http://techmikael.blogspot.ru/2013/07/how-to-copy-files-between-sites-using.html" href="http://techmikael.blogspot.ru/2013/07/how-to-copy-files-between-sites-using.html">http://techmikael.blogspot.ru/2013/07/how-to-copy-files-between-sites-using.html</a></p>
+<p>В зависимости от того какой url вы передали в конструктор <em>SP.RequestExecutor</em> будет иметь разное поведение.</p>
+<ul>
+<li>Если hostname в targerSiteUrl совпадает с hostname текущей страницы, то будут обычные ajax запросы. 
+<li>Если не совпадает, то RequestExecutor будет пытаться отправлять запросы через AppProxy. Этот сценрий будет работать если у вас страница находится в SharePoint App.</li></ul>
+<p>Кроме того, можно передать вторы параметром в конструктор адрес хендлера, который использует класс <em><a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.client.requestforwarder(v=office.14).aspx" target="_blank">Microsoft.SharePoint.Client.RequestForwarder</a> </em>(ни разу не видел чтобы им кто-либо пользовался). Это позволит обращаться к серверу SharePoint из javascript, расположенного на внешнем сайте и не использующем модель приложений. Ранее я про эту возможность писал в статье <a href="http://gandjustas.blogspot.com/2012/03/silverlight-sharepoint-2.html" target="_blank">http://gandjustas.blogspot.com/2012/03/silverlight-sharepoint-2.html</a>.</p>
+<blockquote>
+<p>Кстати Microsoft.SharePoint.Client.RequestForwarder использует класс HttpContext, который создает ссылку на сборку System.Web. Из-за этого сборку Microsoft.SharePoint.Client нельзя использовать в Windows 8 приложениях.</p></blockquote>
+<p>Примеры <em>SP.RequestExecutor</em> по ссылке - <a title="http://msdn.microsoft.com/en-us/library/jj164022.aspx" href="http://msdn.microsoft.com/en-us/library/jj164022.aspx">http://msdn.microsoft.com/en-us/library/jj164022.aspx</a></p>
+<h3>SP.ProxyWebRequestExecutor и SP.ProxyWebRequestExecutorFactory</h3>
+<p>Эти два класса дополняют <em>SP.RequestExecutor</em>. <em>SP.ProxyWebRequestExecutor </em>является наследником <em>Sys.Net.WebRequestExecutor </em>и использует <em>SP.RequestExecutor </em>для выполнения запросов<em>. </em>Вы можете использовать его в любом коде, работающим с <em>Sys.Net.WebRequest </em>(интересно есть у вас такой)<em>,</em> например чтобы заработало в Apps.</p>
+<p>Класс <em>SP.ProxyWebRequestExecutorFactory</em> необходимо использовать если вы собираетесь использовать JSOM на не-SharePoint страницах. </p><pre class="brush: js;">var factory = new SP.ProxyWebRequestExecutorFactory(targetUrl);
+var ctx = new SP.ClientContext(targetUrl);
+ctx.set_webRequestExecutorFactory(factory);
+</pre>
+<p>Документации по этим классам нет, но в проект SPTypeScript я недавно залил дефинишены (описания типов) для всех полезных классов sp.requestexecutor.js&nbsp; - <a title="http://sptypescript.codeplex.com/SourceControl/latest#Definitions/SP.RequestExecutor.d.ts" href="http://sptypescript.codeplex.com/SourceControl/latest#Definitions/SP.RequestExecutor.d.ts">http://sptypescript.codeplex.com/SourceControl/latest#Definitions/SP.RequestExecutor.d.ts</a><br>API небольшое и понять семантику несложно.</p>
+<h3>Рекомендации</h3>
+<p>Если вы делаете javascript для работы с SharePoint на страницах SharePoint, то используйте JSOM. Она достаточно мощная в 2013 и покрывает почти все сценарии. Для обращения к таким вещам как ExcelRest используйте <em>SP.PageRequest.</em></p>
+<p>Если вы делаете не-SharePoint, или в других сложных случаях, страницы используйте <em>SP.RequestExecutor</em> и JSOM с помощью <em>SP.ProxyWebRequestExecutorFactory</em>.</p>
+<p>Если вас пугает многословный API для JSOM, то используйте TypeScript и дефинишены из проекта <a title="http://sptypescript.codeplex.com/" href="http://sptypescript.codeplex.com/">http://sptypescript.codeplex.com/</a>, они почти полностью покрывают JSOM.</p>
+<h3>А как же jQuery?</h3>
+<p>В SharePoint 2013 почти не нужно. Ajax запросы можно делать и без нее, а для манипуляций с DOM есть <a href="http://gandjustas.blogspot.com/2013/07/mquery-sharepoint-2013.html" target="_blank">библиотека mQuery</a>. Про анимацию в SharePoint 2013 напишу в следующий раз.</p>  

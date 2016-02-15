@@ -1,0 +1,153 @@
+---
+layout: post
+title: "Решение задачи. Задача таймера."
+date: '2011-10-10T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint
+modified_time: '2011-10-14T11:52:38.992+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-8671663412358280366
+blogger_orig_url: http://blog.gandjustas.ru/2011/10/blog-post.html
+---
+
+<ol>   <li><a href="http://gandjustas.blogspot.com/2011/08/sharepoint.html">Список задач для проверки навыков</a>. </li>    <li>Создание задачи таймера (<em>этот пост</em>). </li>    <li><a href="http://gandjustas.blogspot.com/2011/10/blog-post_11.html" target="_blank">Использование подходящих классов</a>. </li>    <li><a href="http://gandjustas.blogspot.com/2011/10/blog-post_13.html">Передача команд задаче таймера</a>. </li>    <li><a href="http://gandjustas.blogspot.com/2011/10/blog-post_14.html">Взаимодействие веб-фронтэнда с задачами таймера</a>. </li> </ol>  <p>Ранее я приводил <a href="http://gandjustas.blogspot.com/2011/08/sharepoint.html" target="_blank">список задач для проверки навыков программирования для SharePoint</a>. Сегодня напишу о решении четвертой задачи про задачу таймера для очистки библиотек документов от пустых папок.</p>  <h5>Задача</h5>  <p>Создать задачу таймера (Timer Job), которая буде находить в библиотеках документов пустые папки, в которых нет файлов и которые содержат пустые папки, и удалять их.</p> <cut title="Читать дальше...">  <h5>Класс задачи таймера</h5>  <p>Чтобы создать задачу таймера необходимо создать класс, унаследованный от <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spjobdefinition.aspx" target="_blank"><strong>Microsoft.SharePoint.Administration.SPJobDefinition</strong></a>. Этот класс недоступен в sandbox, поэтому вам нужен farm solution.</p>  <p>В этом классе необходимо переопределить метод Execute и конструктор с параметрами.</p>  <pre class="brush: csharp;">public TimerJob(SPWebApplication webApp)
+    : base(Constants.TimerJobName, webApp, null,
+           SPJobLockType.ContentDatabase)
+{
+    this.Title = &quot;Folder cleanup job&quot;;
+}</pre>
+
+<p>Первым параметром конструктора передается строка, которая будет отличать задачу таймера от других. Title задает отображаемое в админке имя задачи таймера.</p>
+
+<p>Так как ферма SharePoint может состоять из нескольких серверов, то появляется интересный вопрос – где и сколько раз будет запускаться задача таймера. Особое внимание надо уделить параметру SPJobLockType. Детальное описание <a href="http://msdn.microsoft.com/en-us/library/cc406686(v=office.12).aspx#WSSCustomTimerJobs_CreatingCustomTimerJobs" target="_blank">по ссылке</a>. Возможные варианты:</p>
+
+<ul>
+  <li><strong>SPJobLockType.ContentDatabase<em>&#160; </em></strong>- задача таймера запускается для каждой контентной базы данных родительского приложения. </li>
+
+  <li><strong>SPJobLockType.Job </strong>– задача таймера выполняется один раз на всю ферму. В данном режиме учитывается параметр SPServer конструктора, позволяющий указать конкретный сервер для запуска Timer Job. </li>
+
+  <li><strong>SPJobLockType.None </strong>– запускается на каждом сервере в ферме, где развернут родительский сервис. Очень полезно если вам надо запустить некоторый некоторый процесс на каждом сервере в ферме. </li>
+</ul>
+
+<h5>Добавление и удаление задачи таймера</h5>
+
+<p>Для добавления задачи таймера удобно использовать фичу уровня фермы или веб-приложения с флагом Activate On Default равным true. При разветрывании решения с такой фичей она автоматически активируется в указанной области действия. </p>
+
+<p>Код feature receiver:</p>
+
+<pre class="brush: csharp;">public override void FeatureActivated(SPFeatureReceiverProperties properties)
+{
+    var webApp = properties.Feature.Parent as SPWebApplication;
+    var job = new TimerJob(webApp);
+    job.Schedule = new SPHourlySchedule()
+    {
+        BeginMinute = 0,
+        EndMinute = 59
+    };
+
+    job.Update();
+}
+
+
+public override void FeatureDeactivating(SPFeatureReceiverProperties properties)
+{
+    var webApp = properties.Feature.Parent as SPWebApplication;
+    var job = webApp.JobDefinitions.GetValue&lt;TimerJob&gt;(Constants.TimerJobName);
+    job.Delete();
+}</pre>
+
+<p>Класс <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.sphourlyschedule.aspx" target="_blank">SPHourlySchedule</a> является наследником <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spschedule.aspx" target="_blank">SPSchedule</a> и позволяет задавать расписание запуска задачи таймера.</p>
+
+<p><strong>Важно.</strong> Если вы попытаетесь добавить задачу таймера в фиче уровня Site или Web, то при деплое из Visual Studio оно сработает, а при попытке активировать фичу из веб-интерфейса упадет. Это новое ограничение SharePoint 2010, не позволяющее делать Update для классов наследников <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.sppersistedobject.aspx" target="_blank">SPPersistedObject</a> из контекста веб-приложения.</p>
+
+<p>Если же у вас есть унаследованный код, который вы не можете поправить, то вам скорее всего пригодится <a href="http://unclepaul84.blogspot.com/2010/06/sppersistedobject-xxxxxxxxxxx-could-not.html" target="_blank">эта статья</a>.</p>
+
+<h5>Обработка элементов списков</h5>
+
+<p>Теперь перейдем к основной функции задачи таймера – очистка папок. </p>
+
+<pre class="brush: csharp;">public override void Execute(Guid targetInstanceId)
+{
+    SPWebApplication webApplication = this.Parent as SPWebApplication;
+    SPContentDatabase contentDb = webApplication.ContentDatabases[targetInstanceId];
+
+    ProcessDatabase(contentDb);
+}</pre>
+
+<p>Так как при создании Timer Job был указан SPJobLockType.ContentDatabase, то в качестве параметра targetInstanceId будет ID базы данных контента.</p>
+
+<p>Далее циклы по <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spsite.aspx" target="_blank">SPSite</a> и <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spweb.aspx" target="_blank">SPWeb</a>:</p>
+
+<pre class="brush: csharp;">private void ProcessDatabase(SPContentDatabase contentDb)
+{
+    foreach (SPSite site in contentDb.Sites)
+    {
+        try
+        {
+            ProcessSite(site);
+        }
+        finally
+        {
+            site.Dispose();
+        }
+    }
+}
+
+private void ProcessSite(SPSite site)
+{
+    foreach (SPWeb web in site.AllWebs)
+    {
+        try
+        {
+            ProcessWeb(web);
+        }
+        finally
+        {
+            web.Dispose();
+        }
+    }
+}</pre>
+
+<p>Вот такие конструкции необходимо использовать чтобы пройтись по всем SPSite и SPWeb в базе данных. Если не напишите Dispose в циклах, то на сервере очень быстро закончится память. </p>
+
+<p>При разработке задач таймера надо быть очень аккуратным и освобождать все ресурсы. Для задач таймера почти не существует средств мониторинга потребления ресурсов, поэтому будет сложно определить кто поедает всю память.</p>
+
+<p>Для того чтобы обезопасить себя и ваших пользователей необходимо использовать утилиту <a href="http://archive.msdn.microsoft.com/SPDisposeCheck" target="_blank">SPDisposeCheck</a>. Она вам подскажет где надо совободить объекты.</p>
+
+<p>Ну и наконец удаление папок:</p>
+
+<pre class="brush: csharp;">private void ProcessWeb(SPWeb web)
+{
+    foreach (var lib in web.Lists.OfType&lt;SPDocumentLibrary&gt;())
+    {
+        if (!lib.Hidden)
+        {
+            DeleteEmptyFolders(lib.RootFolder.SubFolders);
+        }
+    }
+}
+
+private void DeleteEmptyFolders(SPFolderCollection folders)
+{
+    foreach (var folder in folders.OfType&lt;SPFolder&gt;().ToList())
+    {
+        DeleteEmptyFolder(folder);
+    }
+
+}
+
+private void DeleteEmptyFolder(SPFolder folder)
+{
+    if (folder.Item != null)
+    {
+        DeleteEmptyFolders(folder.SubFolders);
+
+        if (folder.ItemCount == 0)
+        {
+            folder.Delete();
+        }
+    }
+}</pre>
+
+<p>Не копипастите код из статьи до того как прочитаете <a href="http://gandjustas.blogspot.com/2011/10/blog-post_11.html" target="_blank">следующую часть</a>.</p>
+</cut>  

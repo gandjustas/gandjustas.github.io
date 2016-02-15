@@ -1,0 +1,228 @@
+---
+layout: post
+title: "Блеск и нищета Task Parallel Library"
+date: '2012-04-16T11:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- Reactive Extensions
+- ".NET"
+- TPL
+- Architecture
+modified_time: '2012-04-16T11:00:11.056+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-4966785369327181686
+blogger_orig_url: http://blog.gandjustas.ru/2012/04/task-parallel-library.html
+---
+
+<p>Task Parallel Library (пространство имен <a href="http://msdn.microsoft.com/ru-ru/library/system.threading.tasks.aspx" target="_blank">System.Threading.Tasks</a>) появилась еще в .NET 4, но большой популярностью не пользовалась. На подходе компилятор C# 5, который поддерживает конструкцию async\await. В скомпилированом коде async метод превращается в метод возвращающий Task\Task&lt;T&gt;.&#160; Поэтому в скором времени использование TPL станет повсеместным.</p>  <p>Task Parallel Library – имеет очень мощные механизмы: вложенные (nested) задачи, локальные очереди для потоков, чтобы уменьшить латентность, work-stealing алгоритмы для работы, кучи опций запуска задач и продолжений, различные планировщики. Все создано в лучших традициях оптимизации асинхронного кода.</p>  <p><strong>Но, </strong>TPL создавался до мозга костей практиками и цели сделать библиотеку удобной для потребителей даже не ставилось судя по всему.</p>  <ol>   <li>Как это не смешно, то в стандартной библиотеке нету метода, позволяющего обернуть значение T в Task&lt;T&gt;. (Только в .NET 4.5 появился <a href="http://msdn.microsoft.com/en-us/library/hh194922(v=vs.110).aspx" target="_blank">Task.FromResult</a>) </li>    <li>Сам объект Task представляет из себя “задачу”, которая может быть как еще не запущена, так и уже выполняться.&#160; Поэтому работа с разными Task_ами будет осуществляться по-разному. </li>    <li>Task не является immutable объектом, метод ContinueWith изменяет саму задачу. </li>    <li>Функция ContinueWith срабатывает при любом завершении задачи, в том числе отмене или ошибке. Необходимо каждый раз указывать флаги.</li>    <li>Исключения внутри задач собираются в один объект, что затрудняет структурированную их обработку.</li>    <li>Метод ContinueWith принимает Func&lt;Task, T&gt;, а не Func&lt;Task, Task&gt;. Это значит что единственный способ связать две задачи – создать вложенную (nested), что может привести к переполнению стека при завершении цепочки вложенных задач. </li> </ol>  <p>Последний пункт особенно актуален.&#160; Даже был сделан extension-метод <a href="http://msdn.microsoft.com/en-us/library/dd780917.aspx" target="_blank">Unwrap</a>, который позволяет писать код в виде:</p>  <pre class="brush: csharp;">var task = SomeFuncReturningTask(...)
+                .ContinueWith(t =&gt; SomeOtherFuncReturningTask(t.Result))
+                .Unwrap().ContinueWith(...)
+                .Unwrap().ContinueWith(...);</pre>
+
+<p>Тут надо обратить внимание на пункт 4, вызовы методов станут еще более многословными.</p>
+
+<p>Async\await в C# 5 частично решает проблему, позволяя писать в виде:</p>
+
+<pre class="brush: csharp;">var r1 = await SomeFuncReturningTask();
+var r2 = await SomeOtherFuncReturningTask();</pre>
+
+<p>Но есть еще другие варианты использования где даже async\await не помогает, например рекурсивные функции.</p>
+
+<p>Также для .NET существует библиотека Rx, которая создавалась теоретиками (которые Linq придумали). Причем основная часть Rx была получена составлением монады двойственной к IEnumerable.</p>
+
+<p>Для сравнения “теоретического” и “практического” подхода попробую написать функцию вычисления высоты дерева.</p>
+
+<p>Само дерево:</p>
+
+<pre class="brush: csharp;">class Tree&lt;T&gt;
+{
+    public Tree()
+    {
+        this.Children = new List&lt;Tree&lt;T&gt;&gt;();
+    }
+
+    public T Data { get; set; }
+    public List&lt;Tree&lt;T&gt;&gt; Children { get; private set; }
+}
+</pre>
+
+<p>Код тестов очень простой:</p>
+
+<pre class="brush: csharp;">var t = new Tree&lt;int&gt; { Data = 0 };
+for (int i = 1; i &lt; 10 * 1000; i++)
+{
+    t = new Tree&lt;int&gt;
+    {
+        Data = i,
+        Children = { t }
+    };
+}
+
+Console.WriteLine(HeightObservable(t, x =&gt; x.Children).Wait());
+Console.WriteLine(HeightTask(t, x =&gt; x.Children).Result);</pre>
+
+<p>Высота дерева специально выбрана большой – 10000, чтобы проверить насколько эффективно библиотека работает со стеком.</p>
+
+<p>Функция вычисления высоты на Rx:</p>
+
+<pre class="brush: csharp;">static IObservable&lt;int&gt; HeightObservable&lt;T&gt;(T element, Func&lt;T, IEnumerable&lt;T&gt;&gt; childSelector)
+{
+    return childSelector(element)
+            .ToObservable()
+            .SelectMany(e =&gt; HeightObservable(e, childSelector))
+            .Aggregate(0, Math.Max)
+            .Select(x =&gt; x + 1)
+            .ObserveOn(Scheduler.ThreadPool);
+}</pre>
+
+<p>Последний ObserveOn нужен чтобы не возникало stack overflow. Rx стремится как можно меньше использовать concurrency внутри себя и по-умолчанию большинство вызовов “продолжений”(continuation) выполняется синхронно, что приводит к переполнению стека в рекурсивном вызове. <br />Если использовать Rx v2, то можно без ObserveOn обойтись.</p>
+
+<p>Теперь на Task\C# 5. Попытка №1</p>
+
+<pre class="brush: csharp;">static async Task&lt;int&gt; HeightTask&lt;T&gt;(T element, Func&lt;T, IEnumerable&lt;T&gt;&gt; childSelector)
+{
+    var max = 0;
+    foreach (var child in childSelector(element))
+    {
+        var v = await HeightTask(child, childSelector);
+        if (v &gt; max)
+        {
+            max = v;
+        }
+    }
+    return await Task.FromResult(max + 1);
+}</pre>
+
+<p>Падает со stack overflow . Await вычисляет аргумент и получает awaiter у результата. Таким образом идет полный обход всего дерева в первом же await. Кроме этого вычисление высот поддеревьев идет по-очереди. Код не распараллелен.</p>
+
+<p>Чтобы распараллелить код нужна функция IEnumerable&lt;Task&lt;T&gt;&gt; –&gt; Task&lt;IEnumerable&lt;T&gt;&gt;, которая параллельно выполняет задачи и собирает результат в одну последовательность. Такая функция называется ForkJoin.</p>
+
+<p>Первое что пришло в голову написать:</p>
+
+<pre class="brush: csharp;">static Task&lt;IEnumerable&lt;T&gt;&gt; ForkJoin&lt;T&gt;(IEnumerable&lt;Task&lt;T&gt;&gt; tasks)
+{
+    var result = new List&lt;T&gt;();
+    //...
+    foreach (var task in tasks)
+    {
+        task.ContinueWith(t =&gt; result.Add(t.Result) /*...*/);
+    }
+    //...
+}</pre>
+
+<p>Такой код не работает. Падает со stackoverflow на foreach, потому что при получении первого элемента пытается синхронно обойти все дерево.</p>
+
+<p>Нужно написать функцию, которая асинхронно обходит IEnumerable</p>
+
+<pre class="brush: csharp;">static Task&lt;int&gt; EnumerateWithTask&lt;T&gt;(IEnumerable&lt;Task&lt;T&gt;&gt; tasks, Action&lt;Task&lt;T&gt;&gt; continuation)
+{
+    var tcs = new TaskCompletionSource&lt;int&gt;();
+    var enumerator = tasks.GetEnumerator();
+    Action recursive = null;
+    var count = 0;
+
+    recursive = () =&gt;
+        {
+            Task.Factory
+                .StartNew&lt;bool&gt;(enumerator.MoveNext)
+                .ContinueWith(t =&gt;
+                    {
+                        if (t.IsFaulted)
+                        {
+                            tcs.TrySetException(t.Exception.InnerExceptions);
+                        }
+                        else if (t.IsCompleted)
+                        {
+                            if (!t.Result)
+                            {
+                                tcs.TrySetResult(count);
+                            }
+                            else
+                            {
+                                count++;
+                                enumerator.Current.ContinueWith(continuation, TaskContinuationOptions.ExecuteSynchronously);
+                                recursive();
+                            }
+                        }
+                    }, TaskContinuationOptions.ExecuteSynchronously);
+        };
+
+    recursive();
+    return tcs.Task;
+}</pre>
+
+<p>В этой функции вместо итерации используется рекурсия. Так как рекурсия вызывается внутри продолжения Task, то переполнения стека не получается. Функция возвращает Task, которая считает число элементов после окончания обхода последовательности.</p>
+
+<p>Теперь можно написать и ForkJoin:</p>
+
+<pre class="brush: csharp;">static Task&lt;IEnumerable&lt;T&gt;&gt; ForkJoin&lt;T&gt;(IEnumerable&lt;Task&lt;T&gt;&gt; tasks)
+{
+    var result = new List&lt;T&gt;();
+    var tcs = new TaskCompletionSource&lt;IEnumerable&lt;T&gt;&gt;();
+
+    Task&lt;int&gt; countTask = null;
+    var completedCount = 0;
+    var isCompleted = false;
+
+    countTask = EnumerateWithTask(tasks, t =&gt;
+            {
+                if (!isCompleted)
+                {
+                    if (t.IsCanceled)
+                    {
+                        tcs.TrySetCanceled();
+                        isCompleted = true;
+                    }
+                    else if (t.IsFaulted)
+                    {
+                        tcs.TrySetException(t.Exception.InnerExceptions);
+                        isCompleted = true;
+                    }
+                    else if (t.IsCompleted)
+                    {
+                        result.Add(t.Result);
+                        completedCount++;
+                    }
+
+                    if ((countTask.IsCompleted) &amp;&amp; completedCount == countTask.Result)
+                    {
+                        tcs.TrySetResult(result.AsReadOnly());
+                        isCompleted = true;
+                    }
+                }
+            });
+
+    countTask.ContinueWith(t =&gt;
+        {
+            if (!isCompleted)
+            {
+                if (completedCount == t.Result)
+                {
+                    tcs.TrySetResult(result.AsReadOnly());
+                    isCompleted = true;
+                }
+            }
+        });
+    return tcs.Task;
+}</pre>
+
+<p>Когда писал этот код получил разрыв мозга. Боюсь даже представить что будет если придется такой код читать. Скорее всего в этом коде есть ошибки и он не обрабатывает отмену. Так что для production придется помучаться еще сильнее.</p>
+
+<p>Ну и наконец сам код расчета высоты дерева на Task_ах, попытка №2:</p>
+
+<pre class="brush: csharp;">static Task&lt;int&gt; HeightTask&lt;T&gt;(T element, Func&lt;T, IEnumerable&lt;T&gt;&gt; childSelector)
+{
+    return ForkJoin(childSelector(element).Select(e =&gt; HeightTask(e, childSelector)))
+            .ContinueWith(t =&gt; t.Result.Aggregate(0, Math.Max, x =&gt; x + 1));
+}</pre>
+
+<p>Замеры показывают что Rx проигрывает по времени выполнения Task_ам примерно в 2 раза (на Rx v2). Это при том что реально асинхронных операций нет. Реальная асинхронность сделает разницу незаметной. Сложность кода Rx на порядок (в 10 раз) меньше, чем Tasks. </p>
+
+<p>Новомодные фишки типа async\await не помогли в этой задаче вообще никак. Причиной этому служит то, что&#160; Rx спроектирован на основе монад (как и async в F#). Монады позволяют комбинировать вычисления с некоторым контекстом (в данном случае с “продолжениями”) с помощью небольшого набора функций. На базе этих функций можно построить много других.</p>
+
+<p>Async\await – не более чем переписывание кода в компиляторе, никаких монадических конструкций само по себе оно не создает, а TPL не предоставляет средства для композиции. Вот и получаются проблемы на любом коде, сложнее того что в примерах.</p>
+
+<p>Как ни странно но сейчас не существует библиотеки, которая содержит код, решающий проблемы. Максимум некоторые расширения можно найти в <a href="http://code.msdn.microsoft.com/Samples-for-Parallel-b4b76364/sourcecode?fileId=44488&amp;pathId=1890196978" target="_blank">примерах на MSDN</a>.</p>
+
+<p>Заключение</p>
+
+<p>Крайне не рекомендую использовать Tasks для высокоуровневого кода. Rx подходит на эту роль гораздо лучше.</p>  

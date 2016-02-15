@@ -1,0 +1,150 @@
+---
+layout: post
+title: "Кеширование в ASP.NET MVC"
+date: '2013-02-11T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- MVC
+- ASP.NET
+modified_time: '2013-02-11T10:00:10.216+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-5195845430630074298
+blogger_orig_url: http://blog.gandjustas.ru/2013/02/aspnet-mvc.html
+---
+
+<a href="http://gandjustas.blogspot.com/2013/02/blog-post.html">В прошлом посте</a> я рассказывал о различных стратегиях кеширования. Там была голая теория, которая и так всем известна, а кому неизвестна, тому без примеров ничего не понятно. <br><br>В этом посте я хочу показать пример кеширования в приложении ASP.NET MVC и какие архитектурные изменения придется внести, чтобы поддерживать кеширование.<br><br>Для примера я взял приложение <a href="http://mvcmusicstore.codeplex.com/">MVC Music Store</a>, которое используется <a href="http://www.asp.net/mvc/tutorials/mvc-music-store">в разделе обучение на сайте asp.net</a>. Приложение представляет из себя интернет-магазин, с корзиной, каталогом товаров и небольшой админкой.<br><br> <h4>Исследуем проблему</h4>Сразу создал нагрузочный тест на одну минуту, который открывает главную страницу. Получилось 60 страниц в секунду (все тесты запускал в дебаге). Это очень мало, полез разбираться в чем проблема.<br><br>Код контроллера главной страницы:<br><pre class="brush: csharp;">public ActionResult Index()
+{
+    // Get most popular albums
+    var albums = GetTopSellingAlbums(5);
+    return View(albums);
+}
+
+private List&lt;Album&gt; GetTopSellingAlbums(int count)
+{
+    // Group the order details by album and return
+    // the albums with the highest count
+
+    return storeDB.Albums
+        .OrderByDescending(a =&gt; a.OrderDetails.Count())
+        .Take(count)
+        .ToList();
+}
+</pre><br><br>На главной странице выводится агрегирующий запрос, которому придется считать большую часть базы, чтобы вывести результат, при этом изменения на главной происходят нечасто.<br><br>При этом в каждой странице выводится персонализированная информация — количество элементов в корзине.<br>Код _layout.cshtml (Razor):<br><pre class="brush: html;">&lt;div id="header"&gt;
+    &lt;h1&gt;&lt;a href="/"&gt;ASP.NET MVC MUSIC STORE&lt;/a&gt;&lt;/h1&gt;
+    &lt;ul id="navlist"&gt;
+        &lt;li class="first"&gt;&lt;a href="@Url.Content("~")" id="current"&gt;Home&lt;/a&gt;&lt;/li&gt;
+        &lt;li&gt;&lt;a href="@Url.Content("~/Store/")"&gt;Store&lt;/a&gt;&lt;/li&gt;
+        &lt;li&gt;@{Html.RenderAction("CartSummary", "ShoppingCart");}&lt;/li&gt;
+        &lt;li&gt;&lt;a href="@Url.Content("~/StoreManager/")"&gt;Admin&lt;/a&gt;&lt;/li&gt;
+    &lt;/ul&gt;        
+&lt;/div&gt;
+</pre><br><br>Такой «паттерн» часто встречается в веб-приложениях. На главной странице, которая открывается чаще всего, выводится в одном месте статистическая информация, которая требует больших затрат на вычисление и меняется нечасто, а в другом месте — персонализированная информация, которая часто меняется. Из-за этого главная страница работает медленно, и средствами HTTP её кешировать нельзя.<br><br>
+<h4>Делаем приложение пригодным для кеширования</h4>Чтобы такой ситуации, как описано выше, не происходило надо разделить запросы и собирать части страницы на клиенте. В ASP.NET MVC это сделать довольно просто.<br>Код _layout.cshtml (Razor):<br><pre class="brush: html;">&lt;div id="header"&gt;
+    &lt;h1&gt;&lt;a href="/"&gt;ASP.NET MVC MUSIC STORE&lt;/a&gt;&lt;/h1&gt;
+    &lt;ul id="navlist"&gt;
+        &lt;li class="first"&gt;&lt;a href="@Url.Content("~")" id="current"&gt;Home&lt;/a&gt;&lt;/li&gt;
+        &lt;li&gt;&lt;a href="@Url.Content("~/Store/")"&gt;Store&lt;/a&gt;&lt;/li&gt;
+        &lt;li&gt;&lt;span id="shopping-cart"&gt;&lt;/span&gt;&lt;/li&gt;
+        &lt;li&gt;&lt;a href="@Url.Content("~/StoreManager/")"&gt;Admin&lt;/a&gt;&lt;/li&gt;
+    &lt;/ul&gt;        
+&lt;/div&gt;
+
+&lt;!-- skipped --&gt;
+
+&lt;script&gt;        
+    $('#shopping-cart').load('@Url.Action("CartSummary", "ShoppingCart")');
+&lt;/script&gt;
+</pre><br><br>В коде контроллера:<br><pre class="brush: csharp;">//[ChildActionOnly] //Убрал
+[HttpGet] //Добавил
+public ActionResult CartSummary()
+{
+    var cart = ShoppingCart.GetCart(this.HttpContext);
+
+    ViewData["CartCount"] = cart.GetCount();
+    this.Response.Cache.SetCacheability(System.Web.HttpCacheability.NoCache); // Добавил
+    return PartialView("CartSummary");
+}
+</pre><br><br>Установка режима кеширования NoCache необходима, так как браузеры могут по умолчанию кешировать Ajax запросы.<br><br>Само по себе такое преобразование делает приложение только медленнее. По результатам теста — 52 страницы в секунду, с учетом ajax запроса для получения состояния корзины.<br><br>
+<h4>Разгоняем приложение</h4><br>Теперь можно прикрутить lazy кеширование. Саму главную страницу можно кешировать везде и довольно долго (статистика терпит погрешности).<br>Для этого можно просто навесить атрибут OutputCache на метод контроллера:<br><pre class="brush: csharp;">[OutputCache(Location=System.Web.UI.OutputCacheLocation.Any, Duration=60)]
+public ActionResult Index()
+{
+    // skipped
+}
+</pre><br><br>Чтобы оно успешно работало при сжатии динамического контента необходимо в web.config добавить параметр:<br><pre class="brush: xml;">&lt;system.webServer&gt;
+  &lt;urlCompression dynamicCompressionBeforeCache="false"/&gt;
+&lt;/system.webServer&gt;
+</pre><br>Это необходимо чтобы сервер не отдавал заголовок Vary:*, который фактически отключает кеширование.<br><br>Нагрузочное тестирование показало результат 197 страниц в секунду. Фактически страница home\index всегда отдавалась из кеша пользователя или сервера, то есть настолько быстро, насколько возможно и тест померил быстродействие ajax запроса, получающего количество элементов в корзине.<br><br>Чтобы ускорить работу корзины надо сделать немного больше работы. Для начала результат cart.GetCount() можно сохранить в кеше asp.net, и сбрасывать кеш при изменении количества элементов в корзине. Получится в некотором роде write-through кеш.<br><br>В MVC Music Store сделать такое кеширование очень просто, как так всего 3 экшена изменяют состояние корзины. Но в сложном случае, скорее всего, потребуется реализации publish\subscribe механизма в приложении, чтобы централизованно управлять сбросом кеша.<br><br>Метод получения количества элементов:<br><pre class="brush: csharp;">[HttpGet]
+public ActionResult CartSummary()
+{
+    var cart = ShoppingCart.GetCart(this.HttpContext);
+    var cacheKey = "shooting-cart-" + cart.ShoppingCartId;
+
+    this.HttpContext.Cache[cacheKey] = this.HttpContext.Cache[cacheKey] ?? cart.GetCount();
+
+    ViewData["CartCount"] = this.HttpContext.Cache[cacheKey];
+
+    return PartialView("CartSummary");
+}
+</pre><br><br>В методы, изменяющие корзину, надо добавить две строчки:<br><pre class="brush: csharp;">var cacheKey = "shooting-cart-" + cart.ShoppingCartId;
+this.HttpContext.Cache.Remove(cacheKey);
+</pre><br><br>В итоге нагрузочный тест показывает 263 запроса в секунду. В 4 раза больше, чем первоначальный вариант.<br><br>
+<h4>Используем HTTP кеширование</h4>Последний аккорд — прикручивание HTTP кеширование к запросу количества элементов в корзине. Для этого нужно:<br>
+<ol>
+<li>Отдавать Last-Modified в заголовках ответа 
+<li>Обрабатывать If-Modified-Since в заголовках запроса (Conditional GET) 
+<li>Отдавать код 304 если значение не изменилось </li></ol><br><br>Начнем с конца. <br>Код ActionResult для ответа Not Modified:<br><pre class="brush: csharp;">public class NotModifiedResult: ActionResult
+{
+    public override void ExecuteResult(ControllerContext context)
+    {
+        var response = context.HttpContext.Response;
+        response.StatusCode = 304;
+        response.StatusDescription = "Not Modified";
+        response.SuppressContent = true;
+    }
+}
+</pre><br><br>Добавляем обработку Conditional GET и установку Last-Modified:<br><pre class="brush: csharp;">[HttpGet]
+public ActionResult CartSummary()
+{
+    //Кеширование только на клиенте, обновление при каждом запросе
+    this.Response.Cache.SetCacheability(System.Web.HttpCacheability.Private);
+    this.Response.Cache.SetMaxAge(TimeSpan.Zero);
+
+    var cart = ShoppingCart.GetCart(this.HttpContext);
+    var cacheKey = "shooting-cart-" + cart.ShoppingCartId;
+    var cachedPair = (Tuple&lt;DateTime, int&gt;)this.HttpContext.Cache[cacheKey];
+
+    if (cachedPair != null) //Если данные есть в кеше на сервере
+    {
+        //Устанавливаем Last-Modified
+        this.Response.Cache.SetLastModified(cachedPair.Item1);
+
+        var lastModified = DateTime.MinValue;
+
+        //Обрабатываем Conditional Get
+        if (DateTime.TryParse(this.Request.Headers["If-Modified-Since"], out lastModified)
+                &amp;&amp; lastModified &gt;= cachedPair.Item1)
+        {
+            return new NotModifiedResult();
+        }
+
+        ViewData["CartCount"] = cachedPair.Item2;
+    }
+    else //Если данных нет в кеше на сервере
+    {
+        //Текущее время, округленное до секунды
+        var now = DateTime.Now;
+        now = new DateTime(now.Year, now.Month, now.Day,
+                            now.Hour, now.Minute, now.Second);
+
+        //Устанавливаем Last-Modified
+        this.Response.Cache.SetLastModified(now);
+
+        var count = cart.GetCount();
+        this.HttpContext.Cache[cacheKey] = Tuple.Create(now, count);
+        ViewData["CartCount"] = count;
+    }
+
+    return PartialView("CartSummary");
+}
+</pre><br><br>Конечно такой код в production писать нельзя, надо разбить на несколько функций и классов для удобства сопровождения и повторного использования. <br><br>Итоговый результат на минутном забеге — 321 страница в секунду, в 5,3 раза выше, чем в первоначальном варианте. <br><br>
+<h4>Заключение</h4>В реальном проекте надо с самого начала проектировать веб-приложение с учетом кеширования, особенно HTTP-кеширования. Тогда можно будет выдерживать большие нагрузки на довольно скромном железе. 
+  

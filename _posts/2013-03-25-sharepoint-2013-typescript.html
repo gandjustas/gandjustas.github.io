@@ -1,0 +1,177 @@
+---
+layout: post
+title: "Разработка приложений SharePoint 2013 с помощью TypeScript"
+date: '2013-03-25T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint 2013
+- CodeProject
+- typescript
+- SharePoint
+modified_time: '2013-07-15T14:54:20.020+04:00'
+thumbnail: http://lh3.ggpht.com/-Q3PWZ2Kyt70/UU-UYBi36oI/AAAAAAAAASs/o4np03lGq-I/s72-c/image_thumb%25255B3%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-5806167212473022771
+blogger_orig_url: http://blog.gandjustas.ru/2013/03/sharepoint-2013-typescript.html
+---
+
+<p><a href="http://gandjustas.blogspot.com/2013/03/typescript.html" target="_blank">Прошлый раз</a> я описывал преимущества использования TypeScript для разработки приложений. </p> <p>В этом посте я покажу как TypeScript поможет разрабатывать приложения для SharePoint 2013. В SharePoint 2013 были улучшены возможности разработки клиентских приложений на JavaScript. Это касается не только API, доступных на клиенте, но и механизмов поставки и развертывания приложений, инструментов разработчика. Более того, многие функции самого SharePoint 2013 реализованы и могу быть кастомизированы с помощью JavaScript.</p><a name='more'></a> <p>SharePoint 2013 предлагает два вида API для использования на клиентской стороне: Client-Side Object Model (CSOM) и REST API. REST API позволяет манипулировать объектами на сервере используя REST (OData) веб-сервис. CSOM представляет из себя набор классов, семантически эквивалентных серверной объектной модели SharePoint. CSOM доступна как для JavaScript (также называют JSOM – JavaScript Object Model) , так и для .NET. Но в JavaScript, в отличие от .NET, недоступны метаданные и типизация. В этой статье будет рассмотрено именно применение JSOM.</p> <p>TypeScript позволяет описать типы для JSOM и использовать статическую проверку типов и intellisense при разработке приложений. К сожалению готовых определений типов для SharePoint 2013 в открытом доступе нет. </p> <p>Я и <a href="https://twitter.com/amarkeev" target="_blank">Андрей Маркеев</a> создали проект на CodePlex, в котором сделали определения типов и кучу примеров приложений на TypeScript для SharePoint 2013. Ссылка на проект - <a title="http://sptypescript.codeplex.com/" href="http://sptypescript.codeplex.com/" target="_blank">http://sptypescript.codeplex.com/</a></p> <h3>Пример приложения</h3> <p>Для примера создам приложение, позволяющее отслеживать время на рабочем месте. </p> <p><a href="http://lh6.ggpht.com/-kyS4FJQS-2Y/UU-UXdkRXFI/AAAAAAAAASo/HayrZJkja6s/s1600-h/image%25255B7%25255D.png"><img title="image" style="border-top: 0px; border-right: 0px; border-bottom: 0px; border-left: 0px; display: inline" border="0" alt="image" src="http://lh3.ggpht.com/-Q3PWZ2Kyt70/UU-UYBi36oI/AAAAAAAAASs/o4np03lGq-I/image_thumb%25255B3%25255D.png?imgmax=800" width="504" height="362"></a> </p> <h4>Подготовка</h4> <p>Для начала необходимо:</p> <ul> <li>Установить <a href="http://aka.ms/OfficeDevToolsForVS2012" target="_blank">средства разработки приложений для SharePoint 2013</a>.  <li>Установить <a href="http://vswebessentials.com/" target="_blank">Web Essentials 2012</a>.  <li>Установить <a href="http://go.microsoft.com/fwlink/?LinkID=266563" target="_blank">TypeScript</a>.  <li>Если у вас еще нет Office365, то можете <a href="http://msdn.microsoft.com/en-us/library/office/apps/fp179924(v=office.15)" target="_blank">создать 90-дневный trial</a> для отладки и тестирования.  <li>Создать проект SharePoint Hosted приложения.</li></ul> <p>Для того чтобы при сборке проекта выполнялась компиляция&nbsp; TypeScript необходимо добавить в .csproj файл следующие элементы:</p><pre class="brush: xml;">&lt;PropertyGroup&gt;
+    &lt;TypeScriptTarget&gt;ES3&lt;/TypeScriptTarget&gt;
+    &lt;TypeScriptIncludeComments&gt;true&lt;/TypeScriptIncludeComments&gt;
+    &lt;TypeScriptSourceMap&gt;true&lt;/TypeScriptSourceMap&gt;
+&lt;/PropertyGroup&gt;
+&lt;Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\TypeScript\Microsoft.TypeScript.targets" /&gt;
+</pre>
+<p>&nbsp;</p>
+<h4>Библиотеки и определения</h4>
+<p>Визуальный интерфейс будет создан с помощью <a href="http://knockoutjs.com/" target="_blank">библиотеки knockoutjs</a> с расширением <a href="https://github.com/CodeSeven/kolite" target="_blank">koLite</a>.</p>
+<p>Для того чтобы использовать эти библиотеки в проекте необходимо добавить следующие NuGet пакеты:</p>
+<ul>
+<li>KoLite (knockoutjs добавится автоматически)
+<li>jquery.TypeScript.DefinitelyTyped 
+<li>knockout.TypeScript.DefinitelyTyped 
+<li>kolite.TypeScript.DefinitelyTyped</li></ul>
+<p>Последние три пакета представляют из себя .d.ts файлы, которые описывают типы для TypeScript.</p>
+<p>Для работы с JSOM в TypeScript надо добавить в проект файл SharePoint.d.ts, который можно найти <a href="http://sptypescript.codeplex.com/SourceControl/changeset/view/3cded395d044#SPTypeScript/Definitions/SharePoint.d.ts" target="_blank">по ссылке</a>. NuGet пакет будет доступен в ближайшее время.<br></p>
+<h4>Загрузка скриптов по требованию</h4>
+<p>В SharePoint есть свой загрузчик скриптов по требованию в классе SP.SOD. Подробное описание можно найти <a href="http://www.ilovesharepoint.com/2010/08/sharepoint-scripts-on-demand-spsod.html" target="_blank">в этом посте</a>.</p>
+<p>Код загрузчика скриптов приложения:</p><pre class="brush: js;">///&lt;reference path="typings/SharePoint.d.ts" /&gt;
+///&lt;reference path="typings/jquery/jquery.d.ts" /&gt;
+///&lt;reference path="typings/knockout/knockout.d.ts" /&gt;
+
+/// &lt;reference path="ViewModel.ts" /&gt;
+
+
+$(() =&gt; {
+    SP.SOD.registerSod('ViewModels', _spPageContextInfo.webServerRelativeUrl + '/Scripts/ViewModel.js');
+    SP.SOD.registerSodDep('ViewModels', 'sp.js');
+
+    SP.SOD.executeFunc('ViewModels', null, () =&gt; {
+        var vm = new ViewModels.Model(SP.ClientContext.get_current());
+        ko.applyBindings(vm);
+    });
+});
+
+
+</pre>
+<h4>Модель представления</h4>
+<p>Разметка страницы приложения:</p><pre class="brush: xml;">&lt;div&gt;
+    &lt;p data-bind="text:message"&gt;&lt;/p&gt;
+    &lt;button data-bind="text:buttonText, command: checkInOut, visible:isLoaded" style="display:none;"/&gt;
+&lt;/div&gt;
+</pre>
+<p>Используется плагин koLite для асинхронных команд.</p>
+<p>Код модели представления:</p><pre class="brush: js; ">module ViewModels {
+    export class Model {
+        constructor(public context: SP.ClientContext) {
+            this.isLoaded = ko.observable(false);
+            this.message = ko.observable('');
+            this.buttonText = ko.observable('');
+
+            this.checkInOut = ko.asyncCommand({
+                canExecute: (isExecuting) =&gt; !isExecuting &amp;&amp; this.isLoaded(),
+                execute: this.executeCheckInOut
+            });
+
+            this.init();
+        }
+
+        public message: KnockoutObservableString;
+        public buttonText: KnockoutObservableString;
+        public checkInOut: KoliteCommand;
+        public isLoaded: KnockoutObservableBool;
+
+        //...
+    }
+}
+
+<font face="Trebuchet MS">Все типы описаны в .d.ts файлах и проверяются при компиляции.</font></pre>
+<h4>Инициализация модели</h4>
+<p>JSOM при выполнении формирует очередь команд, отправляемых на сервер функцией <em>SP.ClientContext.executeQueryAsync</em>. <em>executeQueryAsync</em> принимает два коллбека, первый вызывается в случае успешного завершения, второй в случае неудачи. Внимание, <em>указатель this портится внутри коллбеков функции executeQueryAsync</em>, но если указывать коллбеки в виде лямбд, то TS заботливо генерирует код, который сохраняет указатель this.</p><pre class="brush: js;">private init() {
+    this.list = this.context.get_web().get_lists().getByTitle('Log');
+    var items = this.list.getItems(SP.CamlQuery.createAllItemsQuery());
+    this.context.load(items);
+
+    this.context.executeQueryAsync(
+        () =&gt; {
+            this.processItems(items);
+            this.setData();
+            this.isLoaded(true);
+        },
+        (sender, args) =&gt; alert(args.get_message()));
+};
+</pre>
+<p>Запрос множества элементов в JSOM возвращает не массив, а коллекцию объектов, реализующую интерфейс IEnumerable,&nbsp; хотя внутри объекта лежит массив. Это все вызвано тем, что большая часть клиентской объектной модели сгенерирована из серверной объектной модели, и все коллекции требуют специальный паттерн для обхода. Он 100% соответствует коду .NET для обработки IEnumerable коллекций.</p>
+<p>Обработка результатов запроса:</p><pre class="brush: js;">private processItems(items: SP.ListItemCollection) {
+    this.hoursSubmitted = 0;
+    var enumerator = items.getEnumerator();
+    while (enumerator.moveNext()) {
+        var item = &lt;SP.ListItem&gt;enumerator.get_current();
+        var author = &lt;SP.FieldUserValue&gt;item.get_item('Author');
+        //Filter by current user
+        if (author.get_lookupId() == _spPageContextInfo.userId) {
+            var dateCompleted = item.get_item('DateCompleted');
+            if (dateCompleted) {
+                this.hoursSubmitted += item.get_item('DurationInHours');
+            } else {
+                this.curentItem = item;
+            }
+        }
+    }
+}
+</pre>
+<p>В коде выше также показано как выполнять приведение типов. TypeScript доверяет всем операциям приведения типов,&nbsp; поэтому вам необходимо следить, чтобы они были корректными.</p>
+<h4>Обработка команд</h4>
+<p>В зависимости от текущего состояния модели выполняется Check-In или Check-Out</p><pre class="brush: js;">private executeCheckInOut(complete: () =&gt; void ) {
+    if (this.curentItem) {
+        this.checkOut(complete);
+    } else {
+        this.checkIn(complete);
+    }
+};
+</pre>
+<p></p>
+<p>Операция Check-In заключается в создании нового элемента в списке SharePoint, без указания времени завершения.</p><pre class="brush: js;">private checkIn(complete: () =&gt; void ) {
+    var item = this.list.addItem(new SP.ListItemCreationInformation());
+    item.set_item('StartDate', new Date());
+    item.update();
+
+    this.context.executeQueryAsync(
+        () =&gt; {
+            this.curentItem = item;
+            this.setData();
+            complete();
+        },
+        (sender, args) =&gt; {
+            alert(args.get_message());
+            complete();
+        });
+}
+</pre>
+<p>&nbsp;</p>
+<p>Противоположная операция – Check-Out – заполняет значения времени завершения и продолжительности в часах.</p><pre class="brush: js;">private checkOut(complete: () =&gt; void ) {
+    var startedDate = &lt;Date&gt;this.curentItem.get_item('StartDate');
+    var dateCompleted = new Date();
+    var hours = (dateCompleted.getTime() - startedDate.getTime()) / (1000 * 60 * 60);
+
+    this.curentItem.set_item('DateCompleted', dateCompleted);
+    this.curentItem.set_item('DurationInHours', hours);
+    this.curentItem.update();
+
+    this.context.executeQueryAsync(
+        () =&gt; {
+            this.curentItem = null;
+            this.hoursSubmitted += hours;
+            this.setData();
+            complete();
+        },
+        (sender, args) =&gt; {
+            alert(args.get_message());
+            complete();
+        });
+}
+</pre>
+<p>В обоих случаях используется один и тот же “паттерн”. Сначала формируется пакет команд для отправки на сервер, а после успешного применения изменения отражаются в модели.</p>
+<h3>Заключение</h3>
+<p>Полный код примера вы можете скачать <a href="http://sptypescript.codeplex.com/releases/view/103953" target="_blank">по ссылке</a>. Также рекомендую посмотреть код проекта и примеры использования определений TypeScript для SharePoint (<a title="source code" href="http://sptypescript.codeplex.com/SourceControl/BrowseLatest">source code</a>), найдете много интересного.</p>
+<p>Кстати сам код примера будет работать и в SharePoint 2010, но придется создать другой проект и по-другому развертывать артефакты решения, чтобы все вместе заработало.</p>
+<p>А в следующий раз я расскажу как можно кастомизировать формы и представления списков в SharePoint 2013, и тоже с помощью TypeScript.</p>  

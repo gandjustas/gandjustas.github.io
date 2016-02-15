@@ -1,0 +1,101 @@
+---
+layout: post
+title: "Загрузка скриптов в SharePoint"
+date: '2014-07-29T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint 2013
+- js
+- javascript
+- typescript
+- jQuery
+- SharePoint
+modified_time: '2014-07-29T13:20:13.259+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1185652928847249052
+blogger_orig_url: http://blog.gandjustas.ru/2014/07/sharepoint-script-load.html
+---
+
+<p>В прошедшем недавно семинаре про клиентской разработке в SharePoint (записи – <a href="http://gandjustas.justclick.ru/order/spclient/" target="_blank">по ссылке</a>) я показывал как сделать клиентский скрипт, который выполняет некоторый код после окончания загрузки страницы в SharePoint.</p> <p>Эта, казалось бы, простая задача далеко не тривиально реализуется в SharePoint. </p> <h3>Причины</h3> <ol> <ol> <li>SharePoint формирует интерфейс динамически. Многие блоки добавляются на страницу по событию <em>body.onload</em>. Это событие возникает позже, чем <em>DOMContentLoaded.</em> Именно это событие перехватывает jQuery.ready. Поэтому использование jQuery часто не приводит к хорошему результату. Подробнее <a href="http://gandjustas.blogspot.com/2014/05/jquery-sharepoint-what-you-need-to-know.html" target="_blank">об использовании jQuery в SharePoint</a>.  <li>Minimal Download Strategy (MDS), появившийся в SharePoint 2013, загружает страницу один раз, потом обновляет блоки страницы, поэтому нужно выполнять дополнительные действия, чтобы скрипт выполнился после загрузки страницы под MDS.  <li>Механизм загрузки скриптов, о <a href="http://gandjustas.blogspot.com/2013/07/sharepoint-script-on-demand.html" target="_blank">котором я писал ранее</a>, требует чтобы скрипт самостоятельно оповещал об окончании выполнения.</li></ol></ol> <h3>Для скриптов в виртуальной файловой системе SharePoint</h3> <p>Чаще всего скрипты SharePoint деплоятся как файлы в виртуальной файловой системе. Это прекрасно работает как в on premises, так и в online.</p> <p>Для размещения скриптов на странице используется контрол ScriptLink, в таком виде:</p><pre class="brush: xml; ">&lt;SharePoint:ScriptLink Name="autofill.js" runat="server" OnDemand="true" LoadAfterUI="true" Localizable="false" /&gt;</pre>
+<p>или с помощью CustomAction ScriptLink в элементе решения</p><pre class="brush: xml;">&lt;CustomAction Location="ScriptLink" ScriptSrc="~site/Extensions/typescripttemplates.js" /&gt;</pre>
+<p>Внутри скрипта нужно выполнить следующие действия:</p>
+<ol>
+<li>Оповестить SharePoint об окончании загрузки. 
+<li>Добавить функцию, которую необходимо вызывать после загрузки страницы, в массив <em>_spBodyOnLoadFunctions</em>. 
+<li>Добавить зарегистрировать скрипт в системе MDS.</li></ol>
+<p>Код:</p><pre class="brush: js;">// IIFE для изоляции
+(function () {
+    "use strict";
+
+    // Имя скрипта должно совпадать с тем, что указано в ScriptLink
+    var scriptLink = "~site/Scripts/myscript.js";
+
+    // Код здесь будет выполняться ДО окончания загрузки страницы
+
+
+    if (_spBodyOnLoadCalled) {
+        // Если событие body.onload уже обработано
+        // напрмиер при LoadAfterUI="true" или OnDemand="true"
+        // то сразу вызываем функцию init
+        init();
+    } else {
+        // Иначе добавляем функцию в массив
+        _spBodyOnLoadFunctions.push(init);
+    }
+
+    function init() {
+        // заменяем токены "~site" и "~sitecollection" на реальные URL 
+        // с помощьюв SPClientRenderer.ReplaceUrlTokens
+        // но эта функция доступна после загрузки CSR
+        // поэтому нужно выполнить зарузку CSR и дождаться её окончания
+        // если CSR уже был загружен, то функция выполнится сразу
+        SP.SOD.executeFunc("clientrenderer.js", "SPClientRenderer.ReplaceUrlTokens", function() {            
+            // тепрь регистрируем скрипт в MDS
+            RegisterModuleInit(SPClientRenderer.ReplaceUrlTokens(scriptLink), init);
+        });
+
+        // Код здесь будет выполняться ПОСЛЕ окончания загрузки страницы
+    }
+
+
+    SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs(scriptLink);
+})();</pre>
+<p>Если вы сами деплоите страницу, на которой будет работать ваш скрипт, то можете воспользоваться <a href="http://gandjustas.blogspot.com/2013/07/mquery-sharepoint-2013.html" target="_blank">библиотекой mQuery</a> и функцией <strong>m$.ready</strong>. Эта функция делает тоже самое, что и блок <em>if\else</em> в коде выше. </p>
+<h3>Для скриптов в layouts</h3>
+<p>Если вы размещаете свой скрипт в <em>_layouts</em>, то есть несколько особенностей:</p>
+<ol>
+<li>При добавлении скрипта надо указывать только имя файла. 
+<li>SOD автоматически регистрирует в MDS вызов функции с именем <em>$_global_имя_файла_без_js</em></li></ol>
+<p>Код для файла в <em>_layouts</em></p><pre class="brush: js;">"use strict";
+
+// эта функция должна быть в глобальном пространстве имен
+function $_global_myscript() {
+    // Код здесь будет выполняться ПОСЛЕ окончания загрузки страницы
+}
+
+
+if (_spBodyOnLoadCalled) {
+    // Если событие body.onload уже обработано
+    // напрмиер при LoadAfterUI="true" или OnDemand="true"
+    // то сразу вызываем функцию init
+    init();
+} else {
+    // Иначе добавляем функцию в массив
+    _spBodyOnLoadFunctions.push(init);
+}
+
+// этот вызов автоматически добавит регистрацию в MDS
+SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("myscript.js");
+
+</pre>
+<h3>Универсальные скрипты</h3>
+<p>Если ваши скрипты будут вызываться вне страниц SharePoint, то обращение к “пространству имен” SP вызовет ошибку.&nbsp; Кроме того есть свой механизм оповещения о загрузке скриптов в MsAjax библиотеке, поэтому в конце скрипта надо использовать такой блок:</p><pre class="brush: js; ">// Оповестить MsAjax об окончании загрузки
+if (typeof Sys != "undefined" &amp;&amp; Sys &amp;&amp; Sys.Application) {
+    Sys.Application.notifyScriptLoaded();
+}
+
+// Оповестить SharePoint об окончании загрузки
+if (typeof SP != "undefined" &amp;&amp; SP &amp;&amp; SP.SOD) {
+    SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("myscript.js");
+}</pre>
+<h3>Заключение</h3>
+<p>Более подробно о загрузке скриптов, TypeScript, особенностях SharePoint и Client Side Rendering можете узнать подробнее, посмотрев записи семинара - <a title="http://gandjustas.justclick.ru/order/spclient/" href="http://gandjustas.justclick.ru/order/spclient/">http://gandjustas.justclick.ru/order/spclient/</a></p>  

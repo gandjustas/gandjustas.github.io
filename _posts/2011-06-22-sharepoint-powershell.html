@@ -1,0 +1,75 @@
+---
+layout: post
+title: "Развертывание решений SharePoint с помощью PowerShell"
+date: '2011-06-22T14:34:00.002+04:00'
+author: "Станислав Выщепан"
+tags:
+- PowerShell
+- SharePoint
+modified_time: '2011-07-06T22:34:35.859+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1547185307612587168
+blogger_orig_url: http://blog.gandjustas.ru/2011/06/sharepoint-powershell.html
+---
+
+<p>После <a href="http://gandjustas.blogspot.com/2011/06/sharepoint-developer-roadmap.html" target="_blank">прочтения кучи книг, статей и просмотра видео</a>, обойдя все <a href="http://gandjustas.blogspot.com/2011/05/blog-post.html" target="_blank">подводные камни</a>, и сделав наконец свое <a href="http://ru.wikipedia.org/wiki/Hello,_world!" target="_blank">решение на SharePoint</a> у вас появляется вопрос: “а как его запустить у заказчика?” Visual Studio предательски сама активирует фичи решения по F5 и деактивирует при завершении отладки. А как тоже сделать у заказчика? А если у вас доступа на машину заказчика нет?</p><p>Для начала стоит подробнее рассмотреть что же требуется для развертывания вашего решения. Обычно развертывание состоит из нескольких шагов:</p><ol><li>Добавление WSP-решений уровня фермы </li>
+<li>Добавление sandboxed решений </li>
+<li>Активация фич </li>
+<li>Выполнение дополнительных действий </li>
+</ol><p>В идеале дополнительные действия должны совершаться при активации фич, поэтому вычеркнем их из данного сценария.</p><p>Вроде все просто. Вооружившись справочником по командам PowerShell&#160; для SharePoint попробуем написать скрипт</p><pre class="brush: ps;">Add-SPSolution -LiteralPath &quot;SomePath\MySolution.wsp&quot;
+Install-SPSolution -Identity &quot;mysolution.wsp&quot; -GACDeployment
+Enable-SPFeature MyFeature -Url http://localhost/</pre><p>Сразу куча проблем:</p><ol><li>Работает только из SharePoint Management Shell </li>
+<li>Add-SPSolution&#160; не понимает относительных путей </li>
+<li>На localhost не будет нужного сайта или надо будет разворачивать в другое место </li>
+<li>Sandboxed решения так добавить не получится </li>
+</ol><p>Чтобы не заставлять пользователя запускать Management Shell можно написать в начале </p><pre class="brush: ps;">Add-PSSnapin Microsoft.SharePoint.Powershell</pre><p>Но после этого появляется ошибка при запуске из Management shell…</p><p>Чтобы обойти проблему нужно проверять загружено ли расширение</p><pre class="brush: ps;">if(!(Get-PSSnapin Microsoft.SharePoint.Powershell -ErrorAction:SilentlyContinue))
+{
+    Add-PSSnapin Microsoft.SharePoint.Powershell
+}</pre><p>Вместо hardcoded параметра сайта можно запрашивать параметр в скрипте с помощью оператора param.&#160; А вот чтобы получить текущий путь скрипта надо использовать <a href="http://weblogs.asp.net/soever/archive/2007/02/06/powershell-regerencing-files-relative-to-the-currently-executing-script.aspx" target="_blank">хак</a>.</p><p>Второй вариант скрипта:</p><pre class="brush: ps;">param($siteUrl= $(Read-Host &quot;siteUrl&quot;))
+
+$dir = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
+$name = &quot;mysolution.wsp&quot;
+$path = &quot;$dir\$name&quot;
+
+if(!(Get-PSSnapin Microsoft.SharePoint.Powershell -ErrorAction:SilentlyContinue))
+{
+    Add-PSSnapin Microsoft.SharePoint.Powershell
+}
+
+Add-SPSolution -LiteralPath $path
+Install-SPSolution $name -GACDeployment
+Enable-SPFeature MyFeature -Url $siteUrl</pre><p>Так уже лучше, но тут есть подводный камень. Install-SPSolution в многосерверной конфигурации не сразу развертывает решение, фичи становится доступны когда развертывание завершится на всех серверах. Поэтому надо писать так:</p><pre class="brush: ps;">$solution = Install-SPSolution $name -GACDeployment
+while($solution.Deployed –eq $false)
+{
+    sleep -s 1
+}</pre><p>Кроме того очень важно делать установочные (и удаляющие) скрипты <a href="http://ru.wikipedia.org/wiki/%D0%98%D0%B4%D0%B5%D0%BC%D0%BF%D0%BE%D1%82%D0%B5%D0%BD%D1%82%D0%BD%D0%BE%D1%81%D1%82%D1%8C" target="_blank">идемпотентными</a>, чтобы запуск скрипта много раз давал такой же эффект как запуск скрипта один раз. Для этого можно применить тот же подход, что и при загрузке командлетов SharePoint.</p><pre class="brush: ps;">param($siteUrl= $(Read-Host &quot;siteUrl&quot;))
+
+$dir = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
+$name = &quot;MySolution.wsp&quot;
+$path = &quot;$dir\$name&quot;
+$featureId = &quot;6F9619FF-8B86-D011-B42D-00CF4FC964FF&quot; #GUID from Wikipedia
+
+if(!(Get-PSSnapin Microsoft.SharePoint.Powershell -ErrorAction:SilentlyContinue))
+{
+    Add-PSSnapin Microsoft.SharePoint.Powershell
+}
+
+$solution = Get-SPSolution $name -ErrorAction:SilentlyContinue
+
+if(!$solution)
+{    
+    $solution = Add-SPSolution -LiteralPath $path
+}
+
+if($solution.Deployed –eq $false)
+{
+    Install-SPSolution $solution -GACDeployment
+    while($solution.Deployed –eq $false)
+    {
+        sleep -s 1
+    }
+}
+
+if(!(Get-SPFeature $featureId -Web $siteUrl -ErrorAction:SilentlyContinue)) #or -Site, -WebApplication, -Farm
+{
+    Enable-SPFeature $featureId -Url $siteUrl
+}</pre><p>И подобный код повторить для каждого решения и фичи. </p><p>Для sandboxed решений будут использоваться другие командлеты <a href="http://technet.microsoft.com/ru-ru/library/ff607715.aspx" target="_blank"><em>Add-SPUserSolution</em></a>, <a href="http://technet.microsoft.com/ru-ru/library/ff607653.aspx" target="_blank"><em>Install-SPUserSolution</em></a> и <a href="http://technet.microsoft.com/ru-ru/library/ff607898.aspx" target="_blank"><em>Get-SPUserSolution</em></a>. Им необходимо дополнительным параметром передать url коллекции сайтов.</p><p>Полученный таким образом скрипт можно запускать как из SharePoint Management Shell, так и из explorer. Главное чтобы необходимые wsp файлы лежали рядом с самим скриптом.</p><p>UPD. На dev wiki появилась <a href="https://www.nothingbutsharepoint.com/sites/devwiki/articles/Pages/Deploying-your-solution-with-PowerShell-Part-1.aspx">статья</a> на эту тему </p>

@@ -1,0 +1,135 @@
+---
+layout: post
+title: "Об обработчиках событий элементов списка, часть 2"
+date: '2011-06-01T19:06:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint
+modified_time: '2011-06-01T19:06:32.364+04:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-8057398186487707969
+blogger_orig_url: http://blog.gandjustas.ru/2011/06/2.html
+---
+
+<p>В <a href="http://gandjustas.blogspot.com/2011/05/blog-post.html" target="_blank">прошлом посте</a> я писал о подводных камнях при создании обработчиков элементов списка. Теперь хочу рассмотреть реальный сценарий создания такого обработчика.</p><p>Наиболее часто программисты SharePoint сталкиваются с необходимостью реализовать field-level security, так как встроенных механизмов в SharePoint нет (зато в Dynamics CRM есть, если что).&#160; Можно написать кастомные формы, которые на уровне интерфейса блокируют возможности поправить значения элементов, но учитывая богатые клиентские возможности SharePoint 2010 такие ограничения легко обойти.</p><p>Поэтому необходимо написать код, который в который при событии <em>Updating</em> сможет определить изменилось поле или нет. Ну и желательно чтобы код был универсальным и работал для любого списка и библиотеки.</p><p>Первое приближение:</p><pre class="brush: csharp;">public static bool IsFieldChanged(this SPItemEventProperties properties, 
+                                       SPField field)
+{
+    var after = (string)properties.AfterProperties[field.InternalName];            
+    var before = Convert.ToString(properties.ListItem[field.Id]);
+    
+    return after != before;
+}</pre><p>Этот код обрабатывает довольно малое число use cases:</p><ol><li>AfterProperties может быть null если свойство не менялось (хотя при отправке формы в AfterProperties&#160; попадают все поля)</li>
+<li>AfterProperties содержит пустую строку если значения нет, SPListItem может при этом возвращать как пустую строку, так и null</li>
+</ol><p>Второе приближение:</p><pre class="brush: csharp;">public static bool IsFieldChanged(this SPItemEventProperties properties, SPField field)
+{
+    var after = (string)properties.AfterProperties[field.InternalName];            
+    var before = Convert.ToString(properties.ListItem[field.Id]);
+    
+
+    //AfterProperties[fieldname] == null - field not changed
+    if (after == null)
+    {
+        return false;
+    }
+
+    //AfterProperties[fieldname] == &quot;&quot; - field set to null
+    if (after == &quot;&quot; &amp;&amp; string.IsNullOrEmpty(before))
+    {
+        return false;
+    }
+
+    //AfterProperties[fieldname] != &quot;&quot;, old value is null or empty - field changed
+    if (string.IsNullOrEmpty(before))
+    {
+        return true;
+    }
+    
+    return after != before
+}</pre><p>Уже лучше, НО:</p><ol><li>Не сработает на Lookup полях, так как форма передает только Id, без Display Value</li>
+<li>Не сработает на булевых полях, так как слишком разные значения попадают в SPListItem и AfterProperties (<em>интересно почему так?</em>)</li>
+<li>Не сработает на датах, так как используется разное форматирование</li>
+<li>Не сработает на множественных значениях, так как они эквивалентны с точностью до порядка</li>
+</ol><p>Выписывать ифы на каждый тип поля или делать стратегии как-то не хочется, хочется универсальный способ. Ведь он существует, как-то сам SharePoint обрабатывает входящие текстовые значения и судя по всему без магии, так как можно создавать свои поля. MSDN быстро дает ответ – <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spfield.getfieldvalue.aspx" target="_blank">SPField.GetFieldValue</a>.</p><p>Третье приближение:</p><pre class="brush: csharp;">public static bool IsFieldChanged(this SPItemEventProperties properties, SPField field)
+{
+    var after = (string)properties.AfterProperties[field.InternalName];            
+    var before = Convert.ToString(properties.ListItem[field.Id]);
+    
+
+    //AfterProperties[fieldname] == null - field not changed
+    if (after == null)
+    {
+        return false;
+    }
+
+    //AfterProperties[fieldname] == &quot;&quot; - field set to null
+    if (after == &quot;&quot; &amp;&amp; string.IsNullOrEmpty(before))
+    {
+        return false;
+    }
+
+    //AfterProperties[fieldname] != &quot;&quot;, old value is null or empty - field changed
+    if (string.IsNullOrEmpty(before))
+    {
+        return true;
+    }
+
+    var afterValue = field.GetFieldValue(after);
+    var beforeValue = field.GetFieldValue(before);
+
+    if (afterValue.Equals(beforeValue))
+    {
+        return false;
+    }
+
+    return after != before;
+}</pre><p>Еще лучше, будут обрабатываться даты и другие поля, для типов значений которых, реализована метод Equals. Но в SharePoint это не так:</p><ol><li><a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spfieldlookupvalue.aspx" target="_blank">SPFieldLookupValue</a> и <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spfielduservalue.aspx" target="_blank">SPFiledUserValue</a> не реализуют метод Equals(<em>похоже что&#160; авторы и не рассматривали сценарии сравнения значений этих типов</em>)</li>
+<li>Для сравнения множественных значений надо написать дополнительный код</li>
+</ol><pre class="brush: csharp;">public static bool IsFieldChanged(this SPItemEventProperties properties, SPField field)
+{
+    var after = (string)properties.AfterProperties[field.InternalName];            
+    var before = Convert.ToString(properties.ListItem[field.Id]);
+    
+
+    //AfterProperties[fieldname] == null - field not changed
+    if (after == null)
+    {
+        return false;
+    }
+
+    //AfterProperties[fieldname] == &quot;&quot; - field set to null
+    if (after == &quot;&quot; &amp;&amp; string.IsNullOrEmpty(before))
+    {
+        return false;
+    }
+
+    //AfterProperties[fieldname] != &quot;&quot;, old value is null or empty - field changed
+    if (string.IsNullOrEmpty(before))
+    {
+        return true;
+    }
+
+    var afterValue = field.GetFieldValue(after);
+    var beforeValue = field.GetFieldValue(before);
+
+    if (afterValue.Equals(beforeValue))
+    {
+        return false;
+    }
+
+    //Compare SPFieldLookupValue and SPFieldUserValue
+    if (afterValue is SPFieldLookupValue)
+    {
+        return (afterValue as SPFieldLookupValue).LookupId != (beforeValue as SPFieldLookupValue).LookupId;
+    }
+
+    //Compare SPFieldLookupValueCollection and SPFieldUserValueCollection
+    if (field is SPFieldLookup &amp;&amp; (field as SPFieldLookup).AllowMultipleValues)
+    {
+        var hsa = new HashSet&lt;int&gt;((afterValue as SPFieldLookupValueCollection).OfType&lt;SPFieldLookupValue&gt;().Select(l =&gt; l.LookupId));
+        var hsb = new HashSet&lt;int&gt;((beforeValue as SPFieldLookupValueCollection).OfType&lt;SPFieldLookupValue&gt;().Select(l =&gt; l.LookupId));
+        return !hsa.SetEquals(hsb);
+    }
+
+    return  after != before;
+}</pre><p>Почти хорошо, осталось два момента:</p><ol><li>Не работает сравнение для <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.spfieldmultichoicevalue.aspx">SPFieldMultiChoiceValue</a></li>
+<li>Для RichText значений в AfterProperties попадают теги все в верхнем регистре, а в SPListItem – в нижнем</li>
+</ol><p>Полный код для SharePoint Foundation доступен по ссылке <a title="http://pastebin.com/8vijzvxV" href="http://pastebin.com/8vijzvxV">http://pastebin.com/8vijzvxV</a></p><p>Если найдете сценарии, которые не обрабатывает данный код – пишите.</p><p>PS. Для SharePoint Server необходимо обрабатывать дополнительные поля, такие как TaxonomyField.</p>

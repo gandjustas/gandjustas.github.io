@@ -1,0 +1,60 @@
+---
+layout: post
+title: SharePoint TypeScript теперь на github
+date: '2015-10-05T10:00:00.000+03:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint 2013
+- sp2013
+- typescript
+- SharePoint
+modified_time: '2015-10-05T10:00:11.078+03:00'
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1068393118484723009
+blogger_orig_url: http://blog.gandjustas.ru/2015/10/sptypescript-on-github.html
+---
+
+<p>SharePoint TypeScript - проект для описания типов TypeScript клиентской библиотеки SharePoint. Это не только JavaScript Object Model, но описания типов для Client-Side Rendering (CSR) - движка для рендеринга форм и представлений, а так всевозможных клиентских компонент.
+
+</p>
+<p>Последние два года проект sptypescript развивался очень вяло. Я уделял ему мало времени, больше занимался бизнесом. Но на прошлой неделе мы с коллегами провели тренинг по разработке форм в SharePoint и нашли много точек роста.
+
+</p>
+<h3>Переезд на github</h3>
+<p>Проект раньше хостился на codeplex, который, к сожалению, растерял все сообщество. Даже Microsoft перевел свои разработки на github. Сообщество разработчиков на github гораздо больше. Поэтому проект переехал по адресу <a href="https://github.com/gandjustas/sptypescript">https://github.com/gandjustas/sptypescript</a>
+
+</p>
+<h3>typescripttemplates.ts</h3>
+<p>Изначально это была библиотека, которая облегчает создания шаблонов для CSR. Со временем туда добавились готовые шаблоны полей, например filtered lookup, который позволяет фильтровать элементы в списке выбора lookup-поля. Библиотека обросла полезной функциональностью, которая может быть полезна при разработке собственных шаблонов.
+
+</p>
+<p>Библиотека доступна в nuget:
+</p>
+<pre><code class="lang-powershell">PM&gt; Install-Package typescripttemplates</code></pre>
+<p>Она автоматически поставит определения типов SharePoint.
+
+</p>
+<p>Вы также можете добавить в проект определения типов отдельно, если не собираетесь кастомизировать формы и представления:
+</p>
+<pre><code class="lang-powershell">PM&gt; Install-Package sharepoint.TypeScript.DefinitelyTyped</code></pre>
+<h3>Поддержка современных средств веб-разработки</h3>
+<p>Набирает популярность стек современных средств разработки: Visual Studio Code (vscode), node, gulp, bower итд. В отличие от взрослой Visual Studio эти средства очень легковесные и кроссплатформенные. Я, например, периодически использую этот стек для разработки на планшете. 
+
+</p>
+<p>Если вы хотите использовать sptypescript в такой среде, то можете установить определения типов с помощью утилиты tsd:
+</p>
+<pre><code class="lang-bat">tsd install sharepoint --save</code></pre>
+<p>Шаблоны для CSR можно поставить с помощью bower:
+</p>
+<pre><code class="lang-bat">bower install typescripttemplates --save</code></pre>
+<p>Если вы все еще запускаете виртуальные машины с SharePoint и Visual Studio для написания клиентских скриптов, то рекомендую вам воспользоваться vscode.
+
+</p>
+<h3>Планы развития</h3>
+<p>В первую очередь мы планируем победить сложность разработки форм SharePoint, путем создания фреймворка для разработки форм на базе angularjs, не потеряв при этом функциональности SharePoint. В ближайшее время появится прототип. Подписывайтесь на обновления на github.
+
+</p>
+<p>Вторая амбициозная цель - сделать на базе sptypescript полноценное руководство (guidance) по клиентской разработке в SharePoint. Сейчас готовятся статьи о том как быстро создавать и разворачивать клиентские приложения, как кастомизировать формы. Также в ближайшее время будут созданы генераторы в yeoman и, скорее всего, шаблоны для SideWaffle в Visual Studio.
+
+</p>
+<h3>Нам нужен ваш фидбек</h3>
+<p>Если у вас есть пожелания - пишите в <a href="https://github.com/gandjustas/sptypescript/issues">https://github.com/gandjustas/sptypescript/issues</a>. Подписывайтесь на обновления репозитария. Используйте определения и шаблоны CSR. И не стесняйтесь делать форки и отправлять pull requests.</p>  

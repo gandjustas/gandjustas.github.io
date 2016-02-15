@@ -1,0 +1,147 @@
+---
+layout: post
+title: 5 правил логирования в SharePoint
+date: '2012-08-22T10:00:00.000+04:00'
+author: "Станислав Выщепан"
+tags:
+- SharePoint
+modified_time: '2014-01-29T16:08:48.994+04:00'
+thumbnail: http://lh5.ggpht.com/-n_tSN_MKD7I/UDQSGzoJI-I/AAAAAAAAAPY/_pI5dC7Xfyg/s72-c/image_4_204207CF_thumb%25255B7%25255D.png?imgmax=800
+blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-6153989809167608413
+blogger_orig_url: http://blog.gandjustas.ru/2012/08/5-sharepoint.html
+---
+
+<p>Большая часть кода, написанного для SharePoint работает в крайне непредсказуемой среде.Полностью отлаженный на компьютере разработчика код может совершенно “необъяснимо” падать в целевой среде. В этой ситуации очень важно логировать происходящее в вашем коде.</p>  <p>Тема логирования очень любима многими разработчиками. Одни предпочитают писать свои велосипеды, другие пользуются готовыми фрейморками, третье используют возможности ОС.</p>  <p>Если вы разрабатываете решения для SharePoint, то вам необходимо придерживаться следующих правил:</p>  <h5>0. Не используйте фреймворки</h5>  <p>Даже если вы очень любите <a href="http://logging.apache.org/log4net/" target="_blank">log4net</a>, или <a href="http://nlog-project.org/" target="_blank">NLog</a>, или <a href="http://msdn.microsoft.com/ru-ru/library/system.diagnostics.eventlog.aspx" target="_blank">EventLog</a>, или <a href="http://msdn.microsoft.com/ru-ru/library/system.diagnostics.trace.aspx" target="_blank">System.Diagnostics.Trace</a>, или пишете свой велосипед, то <u><strong>никогда не используйте ничего из вышеперечисленного</strong></u>.</p>  <p>В SharePoint существует своя система логирования, называемая <a href="http://msdn.microsoft.com/en-us/library/ff512738.aspx" target="_blank">Unified Logging System</a> (ULS). Если у вас возникает вопрос чем ULS лучше чем &lt;<em>подставьте сюда свой любимый фреймворк</em>&gt;, то вот основные причины:</p>  <ul>   <li>ULS уже используется компонентами SharePoint, используя другую систему вам придется собирать логи в нескольких местах </li>    <li>ULS гибко настраивается из Central Administration и PowerShell </li>    <li>ULS умеет писать в Windows Event Log, не требуя при этом привилегий </li>    <li>ULS обеспечивает сжатие текстовых логов на диске </li>    <li>ULS не требует правки web.config (что очень важно для многосерверной фермы) </li>    <li>SharePoint умеет собирать логи ULS (и не только их) со многих серверов в одну базу </li> </ul>  <h5>1.&#160; В простых случаях не делайте ничего</h5>  <p>SharePoint сделан так, что необработанные исключения внутри процессов SharePoint попадают в ULS.&#160; В случае возникновения ошибки очень легко будет в ULS найти stack trace, а если включить уровень логированя VerboseEx, то и все запросы к базе со статистикой.</p>  <p>Для просмотра логов удобнее всего применять утилиту <a href="http://archive.msdn.microsoft.com/ULSViewer/" target="_blank">UlsViewer</a>, для русской версии Windows Server может понадобиться <a href="http://archive.msdn.microsoft.com/ulsviewerfix" target="_blank">патч</a>.</p>  <p>Есть одно исключение из этого правила – веб-части. Если веб-часть в full trust падает с ошибкой, то пользователь увидит только страницу ошибки. Причем если ошибка вызвана персонализированными свойствами, то ошибку будет сложно устранить. Хорошим тоном при разработке веб-частей является не вывод исключения, а&#160; отображение информации как ошибку исправить.</p>  <h5>2. Используйте SPMonitoredScope везде</h5>  <p>Класс <a href="http://msdn.microsoft.com/en-us/library/ff512758" target="_blank">SPMonitoredScope</a> очень прост в использовании:</p>  <pre class="brush: csharp;">using (new SPMonitoredScope(&quot;My Monitored Scope&quot;))
+{
+    // Do Stuff...
+}</pre>
+
+<p>В лог пишутся сообщение при входе в scope и при выходе из него, также записывается время выполнения scope. По умолчанию сообщения от SPMonitoredScope&#160; имеют уровень Verbose.</p>
+
+<p>С помощью SPMonitoredScope&#160; также можно логировать и другие параметры быстродействия и потребления ресурсов</p>
+
+<pre class="brush: csharp;">using (new SPMonitoredScope(&quot;My Scope Name&quot;,1000,
+   new SPRequestUsageCounter(3),
+   new SPSqlQueryCounter(10)))
+{
+    //Do Stuff...
+}</pre>
+
+<p>Если внутри scope время выполнения превысит 1000мс, или количество объектов SPRequest (SPWeb и SPSite) превысит 3, или количество запросов к базе превысит 10, то уровень логирования повысится до High. Кроме того в лог попадут фактические значения этих параметров, а также места создания объектов SPSite\SPWeb в виде stack trace и места где происходили запросы к БД.</p>
+
+<p>Но самое важное заключается в том, что SPMonitoredScope попадает в <a href="http://msdn.microsoft.com/en-us/library/ff512745" target="_blank">Developer Dashboard</a>.</p>
+
+<p>Если написать такой код:</p>
+
+<pre class="brush: csharp;">using (new SPMonitoredScope(&quot;My Monitored Scope&quot;)) 
+{                
+    using (new SPMonitoredScope(&quot;My Sub-Monitored Scope&quot;)) 
+    { 
+        using (new SPMonitoredScope(&quot;My Sub-Sub-Monitored Scope&quot;)) 
+        { 
+        }
+
+        using (new SPMonitoredScope(&quot;Another deep scope&quot;)) 
+        { 
+        } 
+    } 
+}</pre>
+То в Developer Dashboard можно увидеть следующую картину: 
+
+<p><a href="http://lh4.ggpht.com/-o1NfZUhgDEg/UDQSGKe7JcI/AAAAAAAAAPQ/5TzFpmrBlEA/s1600-h/image_4_204207CF%25255B9%25255D.png"><img style="background-image: none; border-right-width: 0px; padding-left: 0px; padding-right: 0px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px; padding-top: 0px" title="image_4_204207CF" border="0" alt="image_4_204207CF" src="http://lh5.ggpht.com/-n_tSN_MKD7I/UDQSGzoJI-I/AAAAAAAAAPY/_pI5dC7Xfyg/image_4_204207CF_thumb%25255B7%25255D.png?imgmax=800" /></a></p>
+
+<h5>3. Используйте SPDiagnosticsService для записи в лог</h5>
+
+<p>Непосредственно в ULS можно писать с помощью класса <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spdiagnosticsservice" target="_blank">SPDiagnosticsService</a>.</p>
+
+<p>Запись в Trace Log:</p>
+
+<pre class="brush: csharp;">SPDiagnosticsService diagSvc = SPDiagnosticsService.Local; 
+diagSvc.WriteTrace(0, 
+    new SPDiagnosticsCategory(&quot;My Category&quot;, 
+        TraceSeverity.Monitorable, 
+        EventSeverity.Error), 
+    TraceSeverity.Monitorable, 
+    &quot;An exception occurred: {0}&quot;, 
+    new object[] {ex}); </pre>
+
+<p>В ULS для каждой записи указывается Area и Category. При таком вызове Area будет равна Unknown.</p>
+
+<p>Также можно писать сразу в Event log:</p>
+
+<pre class="brush: xml;">SPDiagnosticsService diagSvc = SPDiagnosticsService.Local; 
+diagSvc.WriteEvent(0, 
+        new SPDiagnosticsCategory(&quot;My Category&quot;, 
+            TraceSeverity.Monitorable, 
+            EventSeverity.Warning), 
+        EventSeverity.Error, 
+        &quot;Exception occured {0}&quot;, new object[] {ex}); </pre>
+
+<h5>4. Наследуйтесь от SPDiagnosticsServiceBase для гибкой настройки логирования</h5>
+
+<p>Если вы создаете большой компонент для SharePoint, то имеет смысл создать свой <a href="http://msdn.microsoft.com/en-us/library/ff512753" target="_blank">сервис логирования</a> (наследник класса <a href="http://msdn.microsoft.com/en-us/library/microsoft.sharepoint.administration.spdiagnosticsservicebase" target="_blank">SPDiagnosticsServiceBase</a>). В нем можно определить свои Area и Category, а также более легковесные методы для логирования. В Central Administration и PowerShell можно будет задать уровень логирования для каждой категории или Area.</p>
+
+<pre class="brush: csharp;">public class LoggingService : SPDiagnosticsServiceBase
+{
+    public static string DiagnosticAreaName = &quot;My&quot;;
+    private static LoggingService _Current;
+    public static LoggingService Current
+    {
+        get
+        {
+            if (_Current == null)
+            {
+                _Current = new LoggingService();
+            }
+ 
+            return _Current;
+        }
+    }
+ 
+    private LoggingService()
+        : base(&quot;My Logging Service&quot;, SPFarm.Local)
+    {
+ 
+    }
+ 
+    protected override IEnumerable&lt;SPDiagnosticsArea&gt; ProvideAreas()
+    {
+        List&lt;SPDiagnosticsArea&gt; areas = new List&lt;SPDiagnosticsArea&gt;
+        {
+            new SPDiagnosticsArea(DiagnosticAreaName, new List&lt;SPDiagnosticsCategory&gt;
+            {
+                new SPDiagnosticsCategory(&quot;WebParts&quot;, TraceSeverity.Unexpected, EventSeverity.Error)
+            })
+        };
+ 
+        return areas;
+    }
+ 
+    public static void LogError(string categoryName, string errorMessage)
+    {
+        SPDiagnosticsCategory category = LoggingService.Current.Areas[DiagnosticAreaName].Categories[categoryName];
+        LoggingService.Current.WriteTrace(0, category, TraceSeverity.Unexpected, errorMessage);
+    }
+}</pre>
+
+<p>Дальше просто:</p>
+
+<pre class="brush: csharp;">LoggingService.LogError(&quot;WebParts&quot;, ex.ToString);</pre>
+
+<h5>5. Используйте сервис диагностики для клиентских приложений</h5>
+
+<p>В SharePoint есть веб-сервис<em> /_vti_bin/diagnostics.asmx</em>. Он содержит всего один метод, который пишет данные в ULS в категорию SharePoint Foundation –&gt; Unified Logging Service&#160; с уровнем Verbose.</p>
+
+<p>Если вы создаете приложение на Silverlight или Javascript, то другим образом довольно сложно обеспечить логирование, доступное разработчику и администратору.</p>
+
+<p>В библиотеках javascript, предоставляемых SharePoint, есть функции 
+  <br />ULSOnError(msg, url, line) и ULSSendException(ex). Но просто вызвать их не получится. Перед каждым вызовом функции необходимо присвоить ULS.enable значение true.</p>
+
+<pre class="brush: js;">ULS.enable = true;
+ULSOnError(&quot;Hello trace&quot;, document.location.href, 0);</pre>
+
+<p>&#160;</p>
+
+<p>PS. Не забывайте что ULS создан для разработчиков и администраторов. Для пользователей иногда тоже надо хранить и показывать некоторый журнал того что происходило. В этом случае лучше всего работают списки.</p>
+
+<p>PPS. Правил действительно 6, но число 6 в заголовке смотрелось бы гораздо хуже.</p>  
