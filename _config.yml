@@ -8,7 +8,7 @@
 # Site settings
 title: gandjustas' blog
 header-img: img/home-bg.jpg
-description: Блог о SharePoint, облаках, порталах, архитектуре и разработке. 
+description: Блог о SharePoint, облаках, порталах, архитектуре, разработке и бизнесе. 
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "http://blog.gandjustas.ru" # the base hostname & protocol for your site
 
