@@ -20,10 +20,10 @@ layout: null
         <name>{{ site.owner | xml_escape }}</name>
       {% endif %}
       {% if site.owner.email %}
-        <email>{{ site.author.email | xml_escape }}</email>
+        <email>{{ site.owner.email | xml_escape }}</email>
       {% endif %}
       {% if site.owner.uri %}
-        <uri>{{ site.author.uri | xml_escape }}</uri>
+        <uri>{{ site.owner.uri | xml_escape }}</uri>
       {% endif %}
     </author>
   {% endif %}
