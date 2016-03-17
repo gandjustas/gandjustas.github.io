@@ -8,25 +8,53 @@
 # Site settings
 title: gandjustas' blog
 header-img: img/home-bg.jpg
-description: Обо всем понемногу
+description: Блог о SharePoint, облаках, порталах, архитектуре и разработке. 
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "http://blog.gandjustas.ru" # the base hostname & protocol for your site
 
-twitter_username: gandjustas
-github_username:  gandjustas
-facebook_username: gandjustas
-email_username: mail@gandjustas.ru
+# Site owner
+owner:
+  name: Стас Выщепан
+  avatar: img/avatar.png
+  bio: Автор, спикер, консультант, основатель и руководитель vnextsoft.
+  email: mail@gandjustas.ru
+  disqus-shortname: gandjustas
+  twitter: gandjustas
+  facebook: gandjustas
+  yandex:
+    metrika: 24750230
+  google:
+    plus: СтаниславВыщепан
+    analytics: UA-27703615-1
+    verify:
+    ad-client:
+    ad-slot:
+  bing-verify:
+  github: gandjustas
+  stackoverflow: 20655/gandjustas
+  linkedin: gandjustas
+  xing: #username
+  instagram: #username
+  lastfm: #username
+  tumblr: #username
+  pinterest: #username
+  foursquare: #username
+  steam: #username
+  dribbble: #username
+  youtube: gandjustas
+  soundcloud: #username
+  weibo: #username
+  flickr: #username
+  codepen: #username
 
 
-disqus-shortname:gandjustas
+
+disqus-shortname: gandjustas
 
 # Build settings
 markdown: kramdown
 kramdown:
     input: GFM
-
-bootstrap:
-    assets: true
 
 permalink: pretty
 paginate: 5
@@ -34,8 +62,11 @@ paginate: 5
 sass:
   style: compressed
 
+feed:
+  path: atom.xml
+   
 exclude: ["node_modules","gulpfile.js","package.json","README.md", "Gemfile", "Gemfile.lock"]
 
 
-gems: [jekyll-bootstrap-sass, jekyll-paginate, jekyll-feed] 
+gems: [jekyll-paginate, jekyll-sitemap] 
  

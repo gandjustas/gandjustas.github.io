@@ -14,7 +14,8 @@
                     {% endif %}
                     
                     {% if page.layout == "post" %}
-                    <span class="meta"> {% if page.date %}{{ page.date | date: "%B %-d, %Y" }}{% endif %} </span>
+                       <span class="meta"> {% if page.date %}{{ page.date | date: "%B %-d, %Y" }}{% endif %} 
+                       <a  href="{{ post.url | prepend: site.baseurl }}#disqus_thread"></a> </span>
                     {% endif %}
                 </div>
             </div>

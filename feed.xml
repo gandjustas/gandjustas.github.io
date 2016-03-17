@@ -11,7 +11,24 @@ layout: null
     <pubDate>{{ site.time | date_to_rfc822 }}</pubDate>
     <lastBuildDate>{{ site.time | date_to_rfc822 }}</lastBuildDate>
     <generator>Jekyll v{{ jekyll.version }}</generator>
-    {% for post in site.posts limit:10 %}
+    
+    {% if site.owner %}
+    <author>
+      {% if site.owner.name %}
+        <name>{{ site.owner.name | xml_escape }}</name>
+      {% else %}
+        <name>{{ site.owner | xml_escape }}</name>
+      {% endif %}
+      {% if site.owner.email %}
+        <email>{{ site.author.email | xml_escape }}</email>
+      {% endif %}
+      {% if site.owner.uri %}
+        <uri>{{ site.author.uri | xml_escape }}</uri>
+      {% endif %}
+    </author>
+  {% endif %}
+  
+    {% for post in site.posts %}
       <item>
         <title>{{ post.title | xml_escape }}</title>
         <description>{{ post.content | xml_escape }}</description>
@@ -24,6 +41,9 @@ layout: null
         {% for cat in post.categories %}
         <category>{{ cat | xml_escape }}</category>
         {% endfor %}
+        {% if post.excerpt and post.excerpt != empty %}
+        <summary>{{ post.excerpt | strip_html | replace: '\n', ' ' | strip | xml_escape }}</summary>
+        {% endif %}
       </item>
     {% endfor %}
   </channel>

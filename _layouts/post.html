@@ -18,6 +18,7 @@ layout: default
     </li>
     {% endif %}
 </ul>
-  {% if site.disqus-shortname and !page.disablecomments %}
+{% if site.owner.disqus-shortname %}
     <section id="disqus_thread"></section><!-- /#disqus_thread -->
-  {% endif %}
+    {% include disqus_comments.html %}
+{% endif %}

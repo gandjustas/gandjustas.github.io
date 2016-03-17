@@ -458,3 +458,17 @@ img::-moz-selection {
 body {
 	webkit-tap-highlight-color: $brand-primary;
 }
+
+.side-content {
+    font-size: 0.7em;
+}
+
+.author-social{
+    display: block;
+}
+
+.bio-photo {
+    border-radius: 50%;
+    width: 150px;
+    height: 150px;
+}

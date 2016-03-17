@@ -1,1 +1,37 @@
-lorem ipsum
+<div itemscope itemtype="http://schema.org/Person">
+    <p>
+        {% if site.owner.avatar contains 'http' %}
+            <img src="/{{ site.owner.avatar | prepend: site.baseurl }}" class="bio-photo" alt="{{ site.owner.name }} bio photo">
+        {% else %}
+            <img src="/{{ site.owner.avatar | prepend: site.baseurl }}" class="bio-photo" alt="{{ site.owner.name }} bio photo">
+        {% endif %}
+
+        <h3 itemprop="name">{{ site.owner.name }}</h3>
+        {{ site.owner.bio }} <br/>
+        {% if site.owner.email %}<a href="mailto:{{ site.owner.email }}" class="author-social" target="_blank"><i class="fa fa-fw fa-envelope-square"></i> Email</a>{% endif %}
+        {% if site.owner.twitter %}<a href="http://twitter.com/{{ site.owner.twitter }}" class="author-social" target="_blank"><i class="fa fa-fw fa-twitter-square"></i> Twitter</a>{% endif %}
+        {% if site.owner.facebook %}<a href="http://facebook.com/{{ site.owner.facebook }}" class="author-social" target="_blank"><i class="fa fa-fw fa-facebook-square"></i> Facebook</a>{% endif %}
+        {% if site.owner.google.plus %}<a href="http://plus.google.com/+{{ site.owner.google.plus }}" class="author-social" target="_blank"><i class="fa fa-fw fa-google-plus-square"></i> Google+</a>{% endif %}
+        {% if site.owner.linkedin %}<a href="http://linkedin.com/in/{{ site.owner.linkedin }}" class="author-social" target="_blank"><i class="fa fa-fw fa-linkedin-square"></i> LinkedIn</a>{% endif %}
+        {% if site.owner.xing %}<a href="http://www.xing.com/profile/{{ site.owner.xing }}" class="author-social" target="_blank"><i class="fa fa-fw fa-xing-square"></i> XING</a>{% endif %}
+        {% if site.owner.instagram %}<a href="http://instagram.com/{{ site.owner.instagram }}" class="author-social" target="_blank"><i class="fa fa-fw fa-instagram"></i> Instagram</a>{% endif %}
+        {% if site.owner.tumblr %}<a href="http://{{ site.owner.tumblr }}.tumblr.com" class="author-social" target="_blank"><i class="fa fa-fw fa-tumblr-square"></i> Tumblr</a>{% endif %}
+        {% if site.owner.github %}<a href="http://github.com/{{ site.owner.github }}" class="author-social" target="_blank"><i class="fa fa-fw fa-github"></i> Github</a>{% endif %}
+        {% if site.owner.stackoverflow %}<a href="http://stackoverflow.com/users/{{ site.owner.stackoverflow }}" class="author-social" target="_blank"><i class="fa fa-fw fa-stack-overflow"></i> Stackoverflow</a>{% endif %}
+        {% if site.owner.lastfm %}<a href="http://lastfm.com/user/{{ site.owner.lastfm }}" class="author-social" target="_blank"><i class="fa fa-fw fa-music"></i> Last.fm</a>{% endif %}
+        {% if site.owner.dribbble %}<a href="http://dribbble.com/{{ site.owner.dribbble }}" class="author-social" target="_blank"><i class="fa fa-fw fa-dribbble"></i> Dribbble</a>{% endif %}
+        {% if site.owner.pinterest %}<a href="http://www.pinterest.com/{{ site.owner.pinterest }}" class="author-social" target="_blank"><i class="fa fa-fw fa-pinterest"></i> Pinterest</a>{% endif %}
+        {% if site.owner.foursquare %}<a href="http://foursquare.com/{{ site.owner.foursquare }}" class="author-social" target="_blank"><i class="fa fa-fw fa-foursquare"></i> Foursquare</a>{% endif %}
+        {% if site.owner.steam %}<a href="http://steamcommunity.com/id/{{ site.owner.steam }}" class="author-social" target="_blank"><i class="fa fa-fw fa-steam-square"></i> Steam</a>{% endif %}
+        {% if site.owner.youtube %}<a href="https://youtube.com/user/{{ site.owner.youtube }}" class="author-social" target="_blank"><i class="fa fa-fw fa-youtube-square"></i> Youtube</a>{% endif %}
+        {% if site.owner.soundcloud %}<a href="http://soundcloud.com/{{ site.owner.soundcloud }}" class="author-social" target="_blank"><i class="fa fa-fw fa-soundcloud"></i> Soundcloud</a>{% endif %}
+        {% if site.owner.weibo %}<a href="http://www.weibo.com/{{ site.owner.weibo }}" class="author-social" target="_blank"><i class="fa fa-fw fa-weibo"></i> Weibo</a>{% endif %}
+        {% if site.owner.flickr %}<a href="http://www.flickr.com/{{ site.owner.flickr }}" class="author-social" target="_blank"><i class="fa fa-fw fa-flickr"></i> Flickr</a>{% endif %}
+        {% if site.owner.codepen %}<a href="http://codepen.io/{{ site.owner.codepen }}" class="author-social" target="_blank"><i class="fa fa-fw fa-codepen"></i> CodePen</a>{% endif %}
+  </p>
+</div>
+
+<p>
+    <h4>Подписаться на блог</h4>
+    По RSS <a href="http://feeds.feedburner.com/GandjustasBlog"><img src="http://feeds.feedburner.com/~fc/GandjustasBlog?bg=99CCFF&amp;fg=444444&amp;anim=1" height="26" width="88" style="border:0" alt="" /></a>
+</p>

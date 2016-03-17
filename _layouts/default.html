@@ -10,21 +10,19 @@
 
     <div class="container">
 	    <div class="row">
-		    <div class="col-lg-8 col-lg-offset-1 col-md-10 ">
+		    <div class="col-lg-8 col-md-9 ">
                 {{ content }}
             </div>
-		    <div class="col-lg-2 col-md-2 hidden-xs hidden-sm">
+		    <div class="col-lg-4 col-md-3 hidden-xs hidden-sm side-content">
                 {% include side.html %}                
             </div>
     	</div>
     </div>
 
 
-    {% include footer.html %}
-    
-    {% if page.layout == "post" and !page.disablecomments %}
-        {% include disqus_comments.html %}
-    {% endif %}
+    {% include footer.html %}   
+    {% include scripts.html %}   
+
 </body>
 
 </html>
