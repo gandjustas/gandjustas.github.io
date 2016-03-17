@@ -1,20 +1,30 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 
-  {% include head.html %}
+{% include head.html %}
 
-  <body>
+<body>
 
+    {% include nav.html %}
     {% include header.html %}
 
-    <div class="page-content">
-      <div class="wrapper">
-        {{ content }}
-      </div>
+    <div class="container">
+	    <div class="row">
+		    <div class="col-lg-8 col-lg-offset-1 col-md-10 ">
+                {{ content }}
+            </div>
+		    <div class="col-lg-2 col-md-2 hidden-xs hidden-sm">
+                {% include side.html %}                
+            </div>
+    	</div>
     </div>
 
-    {% include footer.html %}
 
-  </body>
+    {% include footer.html %}
+    
+    {% if page.layout == "post" and !page.disablecomments %}
+        {% include disqus_comments.html %}
+    {% endif %}
+</body>
 
 </html>
