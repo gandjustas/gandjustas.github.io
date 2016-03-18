@@ -10,6 +10,7 @@ tags:
 modified_time: '2009-01-21T01:05:59.112+03:00'
 blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-7537845496532528788
 blogger_orig_url: http://blog.gandjustas.ru/2009/01/ioc-unity.html
+redirect_from: /2009/01/ioc-unity.html
 ---
 
 <p>Unity – IoC-контейнер от Microsoft, разработанный группой Patterns&amp;Practicies. Найти его можно по адресу <a title="http://www.codeplex.com/unity" href="http://www.codeplex.com/unity">http://www.codeplex.com/unity</a>. Также Unity включен в состав Enterprise Library.</p>  <p>Будет использоваться версия 1.2, последняя на данный момент.</p>  <p>Итак приступим.    <br />Как <a href="http://martinfowler.com/articles/injection.html">завещал дядька Фаулер</a> будем рассматривать использования контейнера на примере программы, работающей&#160; с базой данных фильмов.</p>  <p>Чтобы использовать Unity в своей программе надо подключить сборки Microsoft.Practices.ObjectBuilder2 и Microsoft.Practices.Unity.</p>  <p>Нам надо написать класс, который позволяет искать фильмы по различным параметрам.</p>  <p>Предположим что фильмы описываются классом Movie </p>  <pre class="c-sharp" name="code">public class Movie

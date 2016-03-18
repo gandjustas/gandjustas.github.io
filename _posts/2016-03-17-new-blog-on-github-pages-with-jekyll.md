@@ -63,3 +63,4 @@ GitHub Pages не поддерживает плагины для Jekyll, кро�
 Если вам интересно как делать сайты без бекенда, то посмотрите [курс на Pluralsight "Web Applications Without a Server"](https://app.pluralsight.com/library/courses/web-applications-without-server). Меня во многом вдохновил этот курс.
 
 
+

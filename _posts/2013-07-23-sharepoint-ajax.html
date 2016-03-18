@@ -13,6 +13,7 @@ tags:
 modified_time: '2013-07-23T13:00:00.822+04:00'
 blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1005284734626437002
 blogger_orig_url: http://blog.gandjustas.ru/2013/07/sharepoint-ajax.html
+redirect_from: /2013/07/sharepoint-ajax.html
 ---
 
 <p>Как вы думаете, сколько способов сделать ajax запрос в SharePoint? А без jQuery и дополнительных библиотек? Нет, XMLHttpRequest руками писать на надо.</p> <h3>Sys.Net.WebRequest \ Sys.Net.WebRequestExecutor</h3> <p>Эти классы находятся в библиотеке MicrosoftAjax. Она подгружается на каждой странице SharePoint и вы можете использовать её на своих страницах. </p> <p>Класс <em>Sys.Net.WebRequest</em> описывает параметры запроса, а <em>Sys.Net.WebRequestExecutor</em>, вернее его наследник, выполняет запрос с указанными параметрами. Можно создавать свои реализации WebRequestExecutor, например для тестирования или для проксирования запросов.</p> <p>Недостаток этих классов в чрезмерной многословности.</p><pre class="brush: js;">var request = new Sys.Net.WebRequest();         
