@@ -28,7 +28,7 @@ layout: null
     </author>
   {% endif %}
   
-    {% for post in site.posts %}
+    {% for post in site.posts limit:30 %}
       <item>
         <title>{{ post.title | xml_escape }}</title>
         <description>{{ post.content | xml_escape }}</description>
