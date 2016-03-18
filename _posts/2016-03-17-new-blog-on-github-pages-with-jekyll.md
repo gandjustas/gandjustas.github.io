@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Новый блог на Jekyll и GitHub Pages"
-date: '2016-03-18T10:00:00.000+03:00'
+date: '2016-03-18T00:00:00.000+03:00'
 tags:
 - "блог"
 - Jekyll
