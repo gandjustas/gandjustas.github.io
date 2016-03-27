@@ -40,7 +40,9 @@
 <p>
     <h4>Другие посты в этой категории</h4>    
     {% for post in site.categories[page.category] %}
+        {% if post.url != page.url %}
         <a href="{{ post.url | prepend: site.baseurl }}">{{ post.title }}</a><br>
+        {% endif %}
     {% endfor %}  
 </p>
 {% endif %}
