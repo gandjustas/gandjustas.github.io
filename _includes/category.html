@@ -1,0 +1,7 @@
+<h3><a class="category-name" href="#{{ include.category | remove:' ' }}">{{ cat_name }}</a></h3>
+<p id="{{ include.category | remove:' ' }}" class="catblock">
+    {% for post in site.categories[include.category] %}
+        <a href="{{ post.url | prepend: site.baseurl }}">{{ post.title }}</a><br>
+    {% endfor %}                      
+    <br/> 
+</p>

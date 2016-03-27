@@ -472,3 +472,23 @@ body {
     width: 150px;
     height: 150px;
 }
+
+.catblock {
+    overflow: hidden;
+    -webkit-transition: all .7s ease-out;
+    -moz-transition: all .7s ease-out;
+    transition: all .7s ease-out;
+
+    &:not(:target) {
+        opacity: 0;
+        max-height: 0;
+    }
+    & :target {
+        opacity: 1;
+        max-height: 3000px;
+    }
+}
+
+a.category-name {
+    cursor:pointer;
+}

@@ -14,9 +14,19 @@
                     {% endif %}
                     
                     {% if page.layout == "post" %}
-                       <span class="meta"> {% if page.date %}{{ page.date | date: "%B %-d, %Y" }}{% endif %} 
-                       <a  href="{{ post.url | prepend: site.baseurl }}#disqus_thread"></a> </span>
+                        <span class="meta"> {% if page.date %}{{ page.date | date: "%B %-d, %Y" }}{% endif %} 
+                       
+                        <a  href="{{ post.url | prepend: site.baseurl }}#disqus_thread"></a>
+                                              
+                        </span>
                     {% endif %}
+
+                    {% if page.category %}
+                        <span class="meta">
+                            В категории <a class="category-name" href="{{ page.category | remove:' ' | prepend: '/categories/#' | prepend: site.baseurl }}">{{ page.category }}</a>
+                        </span>
+                    {% endif %}
+
                 </div>
             </div>
         </div>

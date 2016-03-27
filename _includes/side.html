@@ -35,3 +35,13 @@
     <h4>Подписаться на блог</h4>
     По RSS <a href="http://feeds.feedburner.com/GandjustasBlog"><img src="http://feeds.feedburner.com/~fc/GandjustasBlog?bg=99CCFF&amp;fg=444444&amp;anim=1" height="26" width="88" style="border:0" alt="" /></a>
 </p>
+
+{% if page.category %}
+<p>
+    <h4>Другие посты в этой категории</h4>    
+    {% for post in site.categories[page.category] %}
+        <a href="{{ post.url | prepend: site.baseurl }}">{{ post.title }}</a><br>
+    {% endfor %}  
+</p>
+{% endif %}
+    

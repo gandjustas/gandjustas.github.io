@@ -14,6 +14,7 @@ modified_time: '2013-08-06T10:00:08.933+04:00'
 blogger_id: tag:blogger.com,1999:blog-1302241583051203640.post-1345587400736031949
 blogger_orig_url: http://blog.gandjustas.ru/2013/08/sptypescript.html
 redirect_from: /2013/08/sptypescript.html
+category: SharePoint Client Side
 ---
 
 <p>Вчера была опубликовано обновление для <a href="http://sptypescript.codeplex.com/" target="_blank">SharePoint TypeScript Definitions</a>. Новую версию определений можно получить через NuGet:</p> <h5><a title="http://www.nuget.org/packages/sharepoint.TypeScript.DefinitelyTyped/" href="http://www.nuget.org/packages/sharepoint.TypeScript.DefinitelyTyped/" target="_blank">http://www.nuget.org/packages/sharepoint.TypeScript.DefinitelyTyped/</a></h5> <p>Или командой в Package Manager </p> <blockquote> <p>PM&gt; Install-Package sharepoint.TypeScript.DefinitelyTyped</p></blockquote> <h1>Что нового</h1> <h3>Анимация</h3> <p>В SharePoint 2013 добавили анимацию и, как всегда забыли, выложить документацию по этому делу. Я раскопал как работает анимация. К сожалению возможности библиотеки очень ограничены. Анимация работает для следующих атрибутов элементов:</p> <ul> <li>Позиция (x,y)  <li>Размеры (ширина, высота)  <li>Прозрачность</li></ul> <p>Есть два способа вызвать анимацию.</p> <p>Простой:</p><pre class="brush: js;">SPAnimationUtility.BasicAnimator.FadeOut(element); 

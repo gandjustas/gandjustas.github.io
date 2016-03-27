@@ -1,33 +1,20 @@
 ---
 layout: page
-description: Блог о SharePoint, облаках, порталах, архитектуре и разработке. 
+title: Все посты по категориям
+top-categories: ["SharePoint Client Side", "SharePoint 2013", "SharePoint продвинутая разработка", "SharePoint business value", "SharePoint"]
+description: Нажмите на название категории, чтобы увидеть список постов
 ---
-{% for post in paginator.posts %}
-<div class="post-preview">
-    <a href="{{ post.url | prepend: site.baseurl }}">
-        <h2 class="post-title">{{ post.title }}</h2>
-    </a>
-    <p class="post-meta">{% if post.date %}{{ post.date | date: "%B %-d, %Y" }}{% endif %} </p>
-    {{post.content}}
-</div>
-<hr>
-<br/>
-{% endfor %}
 
-<!-- Pager -->
-{% if paginator.total_pages > 1 %}
-<ul class="pager">
-    {% if paginator.previous_page %}
-    <li class="previous">
-        <a href="{{ paginator.previous_page_path | prepend: site.baseurl | replace: '//', '/' }}">&larr; Предыдущая страница</a>
-    </li>
-    {% endif %}
-    {% if paginator.next_page %}
-    <li class="next">
-        <a href="{{ paginator.next_page_path | prepend: site.baseurl | replace: '//', '/' }}">Следующая страница &rarr;</a>
-    </li>
-    {% endif %}
-</ul>
-{% endif %}
+{% for cat_name in page.top-categories %}
+    {% include category.html category=cat_name %}
+{% endfor %}                      
 
- 
+
+
+{% for cat in site.categories %}
+    {% capture cat_name %}{{ cat | first }}{% endcapture %}
+        
+    {% unless page.top-categories contains cat_name %}
+        {% include category.html category=cat_name %}
+    {% endunless %}                      
+{% endfor %}                      
