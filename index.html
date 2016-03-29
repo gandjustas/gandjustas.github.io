@@ -9,6 +9,14 @@ description: Блог о SharePoint, облаках, порталах, архи�
     </a>
     <p class="post-meta">{% if post.date %}{{ post.date | date: "%B %-d, %Y" }}{% endif %} </p>
     {{post.content}}
+    {% if forloop.index == 2 %}
+    <!-- Responsive -->
+    <ins class="adsbygoogle"
+        style="display:block"
+        data-ad-client="ca-pub-4291121873977655"
+        data-ad-slot="6228432527"
+        data-ad-format="auto"></ins>
+    {% endif %}
 </div>
 <hr>
 <br/>

@@ -46,3 +46,44 @@ $(function() {
             });
     }
 });
+
+
+function loadScript(d, s, src, id, b, timeout) {
+    var js, fjs = d.getElementsByTagName(s)[0];
+    if (d.getElementById(id)) return;
+    js = d.createElement(s); 
+    if(id) js.id = id;
+    js.src = src;
+    js.async = 1;
+    js.innerHTML = b;
+    
+    var executed = false;
+    var deferred = $.Deferred();
+    timeout = timeout || 0;
+    
+    function afterLoad() {
+        setTimeout(function() {
+            deferred.resolve();
+        }, timeout); // сохранить "this" для onload
+    }
+    
+    js.onload = function(){
+        if (!executed) { // выполнится только один раз
+            executed = true;
+            afterLoad();
+        }
+    }
+    
+    js.onreadystatechange = function() {
+        var self = this;
+        if (this.readyState == "complete" || this.readyState == "loaded") {
+            setTimeout(function() {
+                 self.onload()
+            }, 0); // сохранить "this" для onload
+        }
+    }
+    
+    fjs.parentNode.insertBefore(js, fjs);
+    
+    return deferred.promise();
+}
