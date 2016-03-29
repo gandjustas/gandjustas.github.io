@@ -11,6 +11,7 @@ header-img: img/home-bg.jpg
 description: Блог о SharePoint, облаках, порталах, архитектуре, разработке и бизнесе. 
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "http://blog.gandjustas.ru" # the base hostname & protocol for your site
+fb_appid: 1377276285871043
 
 # Site owner
 owner:
@@ -25,7 +26,6 @@ owner:
   disqus-shortname: gandjustas
   twitter: gandjustas
   facebook: gandjustas
-  fb_appid: 1377276285871043
   yandex:
     metrika: 24750230
   google:
