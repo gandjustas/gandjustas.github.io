@@ -65,9 +65,9 @@
     (adsbygoogle = window.adsbygoogle || []).push({});      
 
     $(window).load(function(){    
-        loadScript(document, 'script', "//s7.addthis.com/js/300/addthis_widget.js#pubid={{site.social.addthis}}", null, null, 5000)                   
+        loadScript(document, 'script', "//s7.addthis.com/js/300/addthis_widget.js#pubid={{site.social.addthis}}", null, null, 1000)                   
         .then(function() { return loadScript(document, 'script', "//connect.facebook.net/ru_RU/sdk.js#xfbml=1&version=v2.5&appId={{ site.social.fb_appid }}", 'facebook-jssdk', null); })        
-        .then(function() { return loadScript(document, 'script', "https://apis.google.com/js/platform.js",null,"{lang: 'ru'}",5000) })
+        .then(function() { return loadScript(document, 'script', "https://apis.google.com/js/platform.js",null,"{lang: 'ru'}",1000) })
         .then(function() { return loadScript(document, 'script', "//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"); })
     });
 </script>
