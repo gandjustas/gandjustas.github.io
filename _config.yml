@@ -15,12 +15,17 @@ url: "http://blog.gandjustas.ru" # the base hostname & protocol for your site
 # Site owner
 owner:
   name: Стас Выщепан
+  first_name: Стас
+  last_name: Выщепан
+  username: gandjustas
+  gender: male
   avatar: img/avatar.png
   bio: Автор, спикер, консультант, основатель и руководитель vnextsoft.
   email: mail@gandjustas.ru
   disqus-shortname: gandjustas
   twitter: gandjustas
   facebook: gandjustas
+  fb_appid: 1377276285871043
   yandex:
     metrika: 24750230
   google:

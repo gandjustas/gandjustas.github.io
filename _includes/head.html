@@ -6,7 +6,37 @@
     <title>{% if page.title %}{{ page.title }}{% else %}{{ site.title }}{% endif %}</title>
     <meta name="title" content="{% if page.title %}{{ page.title }}{% else %}{{ site.title }}{% endif %}" />
     <meta name="description" content="{% if page.excerpt %}{{ page.excerpt | strip_html | strip_newlines | truncate: 160 }}{% else %}{{ site.description }}{% endif %}">
-
+    
+    {% capture og_type %}{% if page.type %}{{ page.type }}{% elsif page.layout == 'post' %}{{ 'article' }}{% else %}{{ 'website' }}{% endif %}{% endcapture %}
+    <!--Open graph-->
+    <meta property="og:title" content="{% if page.title %}{{ page.title }}{% else %}{{ site.title }}{% endif %}" />
+    <meta property="og:url" content="{{ page.url | replace:'index.html','' | prepend: site.baseurl | prepend: site.url }}" />
+    <meta property="og:type" content="{{ og_type }}" />             
+    <meta property="og:image" content="{{ site.baseurl }}/{% if page.header-img %}{{ page.header-img }}{% else %}{{ site.header-img }}{% endif %}" />
+    <meta property="fb:app_id" content="{{ site.fb_appid }}" />             
+    {% if og_type == 'article' %}
+    {% if page.category %}
+    <meta property="article:section" content="{{ page.category }}" />             
+    {% endif %}    
+    {% for tag in post.tags %}
+    <meta property="article:tag" content="{{ page.tag }}" />             
+    {% endfor %}
+    <meta property="article:published_time" content="{{ page.date }}" /> 
+    {% if page.modified_time %}                
+    <meta property="article:modified_time" content="{{ page.modified_time }}" />             
+    {% endif %}
+    {% if site.owner.facebook %}
+    <meta property="article:author" content="https://www.facebook.com/{{ site.owner.facebook }}" />             
+    {% endif %}                     
+    {% endif %}
+    {% if og_type == 'profile' %}
+    <meta property="profile:first_name " content="{{ site.owner.first_name }}" />             
+    <meta property="profile:last_name " content="{{ site.owner.last_name }}" />             
+    <meta property="profile:username " content="{{ site.owner.username }}" />             
+    <meta property="profile:gender " content="{{ site.owner.gender }}" />             
+    {% endif %}
+    
+    
     <link rel="stylesheet" href="{{ "/css/main.css" | prepend: site.baseurl }}">
 
     <!-- Custom Fonts -->
