@@ -12,7 +12,7 @@
     <meta property="og:title" content="{% if page.title %}{{ page.title }}{% else %}{{ site.title }}{% endif %}" />
     <meta property="og:url" content="{{ page.url | replace:'index.html','' | prepend: site.baseurl | prepend: site.url }}" />
     <meta property="og:type" content="{{ og_type }}" />             
-    <meta property="og:image" content="{{ site.baseurl }}/{% if page.header-img %}{{ page.header-img }}{% else %}{{ site.header-img }}{% endif %}" />
+    <meta property="og:image" content="{{ site.baseurl | prepend: site.url }}/{% if page.header-img %}{{ page.header-img }}{% else %}{{ site.header-img }}{% endif %}" />
     <meta property="fb:app_id" content="{{ site.fb_appid }}" />             
     {% if og_type == 'article' %}
     {% if page.category %}
