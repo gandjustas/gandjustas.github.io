@@ -4,5 +4,8 @@
 - title: Карта сайта
   url: /categories
 
+- title: Об авторе
+  url: /about
+
 - title: Поиск
   url: /search
