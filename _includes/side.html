@@ -1,4 +1,4 @@
-<p itemscope itemtype="http://schema.org/Person">
+<div itemscope itemtype="http://schema.org/Person">
         <a href="{{ '/about' | prepend: site.baseurl }}">
         {% if site.owner.avatar contains 'http' %}
             <img src="/{{ site.owner.avatar }}" class="bio-photo" alt="{{ site.owner.name }} bio photo" />
@@ -29,48 +29,45 @@
         {% if site.owner.weibo %}<a href="http://www.weibo.com/{{ site.owner.weibo }}" class="author-social" target="_blank"><i class="fa fa-fw fa-weibo"></i> Weibo</a>{% endif %}
         {% if site.owner.flickr %}<a href="http://www.flickr.com/{{ site.owner.flickr }}" class="author-social" target="_blank"><i class="fa fa-fw fa-flickr"></i> Flickr</a>{% endif %}
         {% if site.owner.codepen %}<a href="http://codepen.io/{{ site.owner.codepen }}" class="author-social" target="_blank"><i class="fa fa-fw fa-codepen"></i> CodePen</a>{% endif %}
-</p>
+</div>
 
-<p>
+<div>
     <h4>Подписаться на блог</h4>
-    RSS <a href="http://feeds.feedburner.com/GandjustasBlog"><img src="http://feeds.feedburner.com/~fc/GandjustasBlog?bg=99CCFF&amp;fg=444444&amp;anim=1" height="26" width="88" style="border:0" alt="" /></a>
-</p>
-    
-<p>
+    RSS <a href="http://feeds.feedburner.com/GandjustasBlog"><img src="http://feeds.feedburner.com/~fc/GandjustasBlog?bg=99CCFF&amp;fg=444444&amp;anim=1" height="26" width="88" style="border:0; display:inline-block;" alt="" /></a>
+</div>
+
+<div>    
     <div class="fb-page" 
         data-href="https://www.facebook.com/{{ site.social.facebook }}"
         data-width="270" 
         data-hide-cover="false"
         data-show-facepile="true" 
         data-show-posts="false"></div>
-</p>
-
-<p>
+</div>
+<div>
     <div class="g-page" 
         data-width="250" 
         data-href="//plus.google.com/u/0/{{ site.social.gplus }}" 
         data-layout="landscape" 
         data-showcoverphoto="false" 
         data-rel="publisher"></div>
-</p>
-    
-
+</div>    
 {% if page.category %}
-<p>
+<div>
     <h4>Другие посты в этой категории</h4>    
     {% for post in site.categories[page.category] %}
         {% if post.url != page.url %}
         <a href="{{ post.url | prepend: site.baseurl }}">{{ post.title }}</a><br>
         {% endif %}
     {% endfor %}  
-</p>
+</div>
 {% endif %}
 
-<p>
+<div>
     <!-- Left bar ad -->
     <ins class="adsbygoogle"
         style="display:inline-block;width:300px;height:600px"
         data-ad-client="ca-pub-4291121873977655"
         data-ad-slot="6507634126"></ins>
-</p>
+</div>
     

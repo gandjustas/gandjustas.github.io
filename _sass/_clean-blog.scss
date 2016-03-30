@@ -461,6 +461,9 @@ body {
 
 .side-content {
     font-size: 0.7em;
+    > div {
+        margin: 20px 0;
+    }
 }
 
 .author-social{
