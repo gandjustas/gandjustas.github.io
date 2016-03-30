@@ -1,0 +1,12 @@
+---
+layout: page
+title: Магазин
+description: Продаются записи прошедших тренингов для всех желающих 
+---
+
+{% for product in site.shop %}
+  <h2><a href="{{product.url | prepend: site.baseurl}}">{{ product.title }}</a></h2>
+  <p>{{product.excerpt}}</p>
+  <p><a href="{{product.url | prepend: site.baseurl}}">Подробнее >></a></p>
+  <hr/>
+{% endfor %}
