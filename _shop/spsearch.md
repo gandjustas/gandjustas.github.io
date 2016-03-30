@@ -26,7 +26,5 @@ description: Видеозаписи, презентации и примеры к
 * Обзор объектной модели (со стороны клиента, со стороны сервера)
 
 
-<iframe class="iframe" src="https://money.yandex.ru/fastpay/form/275f8717ece145e3b821cff657aed406" width="500" height="356" style="border: 1px solid #e8e8e8;"></iframe>
-
-В течении суток после оплаты вы получите на почту ссылку на материалы тренига, по которой вы можете скачать видео, посмотреть презнетации и примеры кода.
-
+<iframe class="iframe" src="https://money.yandex.ru/fastpay/form/3fa458cfbc1e41028475dbd116f078fa" width="500" height="417" style="border: 1px solid #e8e8e8;"></iframe>
+В течении суток после оплаты на указанный email вы получите ссылку на материалы тренига, по которой вы можете скачать видео, посмотреть презнетации и примеры кода.

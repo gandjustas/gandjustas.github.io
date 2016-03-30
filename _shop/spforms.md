@@ -17,6 +17,5 @@ description: Видеозаписи, презентации и примеры к
 
 Все знания и навыки применимы как для облачных, так и наземных версий SharePoint 2013 и 2016.
 
-<iframe class="iframe" src="https://money.yandex.ru/fastpay/form/612eba8a7ce140ecb3fe5d9d47f5b4b9" width="500" height="356" style="border: 1px solid #e8e8e8;"></iframe>
-
-В течении суток после оплаты вы получите на почту ссылку на материалы тренига, по которой вы можете скачать видео, посмотреть презнетации и примеры кода.
+<iframe class="iframe" src="https://money.yandex.ru/fastpay/form/cfb6675a92fc4025af2d08a5acd188d7" width="500" height="417" style="border: 1px solid #e8e8e8;"></iframe>
+В течении суток после оплаты на указанный email вы получите ссылку на материалы тренига, по которой вы можете скачать видео, посмотреть презнетации и примеры кода.
