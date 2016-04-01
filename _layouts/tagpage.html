@@ -1,0 +1,34 @@
+---
+layout: default
+---
+{{ content }}
+
+<h1>Страницы с {% if post.tags.size == 1 %}тегом{% else %}тегами{% endif %} : 
+    {% for tag in page.tags %}
+        {{ tag }}{% if forloop.last == false %}, {% endif %}
+    {% endfor %}
+</h1>
+
+{% for tag in page.tags %}
+    {% if site.tags[tag] %}
+        {% for post in site.tags[tag] %}
+            <div class="post-preview">
+                <a href="{{ post.url | prepend: site.baseurl }}">
+                    <h2 class="post-title">{{ post.title }}</h2>
+                </a>
+                <p class="post-meta">{% if post.date %}{{ post.date | date: "%B %-d, %Y" }}{% endif %} </p>
+                {{post.excerpt}}
+                {% if forloop.index == 2 %}
+                <!-- Responsive -->
+                <ins class="adsbygoogle"
+                    style="display:block"
+                    data-ad-client="ca-pub-4291121873977655"
+                    data-ad-slot="6228432527"
+                    data-ad-format="auto"></ins>
+                {% endif %}
+            </div>
+            <hr>
+            <br/>        
+        {% endfor %}
+    {% endif %}
+{% endfor %}

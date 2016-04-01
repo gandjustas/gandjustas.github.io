@@ -22,6 +22,17 @@ social:
 collections:
     shop:
         output: true    
+    tagpages:
+        output: true
+        permalink: /tag/:title    
+
+defaults:
+  - scope:
+      path: ""
+      type: tagpages
+    values:
+      layout: tagpage
+
         
 # Site owner
 owner:
