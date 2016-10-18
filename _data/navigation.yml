@@ -4,8 +4,8 @@
 - title: Карта сайта
   url: /categories
 
-- title: Магазин
-  url: /shop
+#- title: Магазин
+#  url: /shop
 
 - title: Об авторе
   url: /about
