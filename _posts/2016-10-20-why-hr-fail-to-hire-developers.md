@@ -47,10 +47,10 @@ category: Прочее
 За 5 минут нахожу исследование [https://www.superjob.ru/research/articles/111451/vybiraya-rabotu-programmisty-ischut-interesnyh-zadach-bankovskie-operacionisty-perspektiv-rosta-rabochie-i-medsestry-horoshego-kompensacionnogo-paketa/](https://www.superjob.ru/research/articles/111451/vybiraya-rabotu-programmisty-ischut-interesnyh-zadach-bankovskie-operacionisty-perspektiv-rosta-rabochie-i-medsestry-horoshego-kompensacionnogo-paketa/).
 
 Для программистов в порядке убывания важности:  
-1. Высокая зарплата
-2. Интересные задачи
-3. Очевидные перспективы карьерного роста
-4. Удобное расположение офиса
+1. Высокая зарплата  
+2. Интересные задачи  
+3. Очевидные перспективы карьерного роста  
+4. Удобное расположение офиса  
 
 Что из этого есть в вакансии? Ничего.
 
