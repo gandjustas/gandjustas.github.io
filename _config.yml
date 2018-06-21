@@ -91,5 +91,5 @@ feed:
 exclude: ["node_modules","gulpfile.js","package.json","README.md", "Gemfile", "Gemfile.lock"]
 
 
-gems: [jekyll-paginate, jekyll-sitemap,jekyll-redirect-from] 
+plugins: [jekyll-paginate, jekyll-sitemap,jekyll-redirect-from] 
  
